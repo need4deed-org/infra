@@ -1,0 +1,20 @@
+name: deploy-dev
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply manifests on AITS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.AITS_HOST }}
+          username: root
+          key: ${{ secrets.AITS_SSH_KEY }}
+          script: |
+            cd /opt/infra
+            git pull
+            kubectl apply -k overlays/dev/

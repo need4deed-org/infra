@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: be
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: be
+  template:
+    metadata:
+      labels:
+        app: be
+    spec:
+      # Uncomment if the ghcr.io package is private:
+      # imagePullSecrets:
+      #   - name: ghcr-secret
+      containers:
+        - name: be
+          image: ghcr.io/need4deed-org/be:develop
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: be-secret
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /health-check
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health-check
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
