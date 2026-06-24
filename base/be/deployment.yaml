@@ -12,9 +12,8 @@ spec:
       labels:
         app: be
     spec:
-      # Uncomment if the ghcr.io package is private:
-      # imagePullSecrets:
-      #   - name: ghcr-secret
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: be
           image: ghcr.io/need4deed-org/be:develop
