@@ -24,6 +24,7 @@ spec:
       containers:
         - name: be
           image: ghcr.io/need4deed-org/be:develop
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           envFrom:
