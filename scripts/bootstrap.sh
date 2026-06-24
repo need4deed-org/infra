@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bootstrap k3s + AITS on a fresh Ubuntu VPS.
-# Run as root on the VPS: bash bootstrap.sh
+# Run as a sudoer: bash bootstrap.sh
 set -euo pipefail
 
 NAMESPACE=n4d-dev
@@ -8,8 +8,12 @@ ACME_EMAIL=dev@need4deed.org
 INFRA_REPO=https://github.com/need4deed-org/infra.git
 INFRA_DIR=/opt/infra
 
+# Allow non-root users to call kubectl without sudo.
+# k3s writes its kubeconfig as root-only by default; this makes it world-readable.
+K3S_KUBECONFIG_MODE=644
+
 echo "=== 1/5  Installing k3s ==="
-curl -sfL https://get.k3s.io | sh -
+curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE=644 sh -
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 echo "=== 2/5  Waiting for node to be Ready ==="
@@ -20,7 +24,7 @@ echo ""
 
 echo "=== 3/5  Configuring Traefik for Let's Encrypt ==="
 # k3s watches /var/lib/rancher/k3s/server/manifests/ and applies changes automatically.
-cat > /var/lib/rancher/k3s/server/manifests/traefik-config.yaml <<EOF
+sudo tee /var/lib/rancher/k3s/server/manifests/traefik-config.yaml > /dev/null <<EOF
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
@@ -38,7 +42,8 @@ spec:
 EOF
 
 echo "=== 4/5  Cloning infra repo ==="
-git clone "$INFRA_REPO" "$INFRA_DIR"
+sudo git clone "$INFRA_REPO" "$INFRA_DIR"
+sudo chown -R "$USER:$USER" "$INFRA_DIR"
 
 echo "=== 5/5  Creating namespace ==="
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
@@ -74,7 +79,7 @@ echo "  --docker-username=<github-username> \\"
 echo "  --docker-password=<github-pat-with-read-packages>"
 echo "(Then uncomment imagePullSecrets in base/be/deployment.yaml)"
 echo ""
-echo "DNS: add an A record  aits.need4deed.org → $(curl -s ifconfig.me)"
+echo "DNS: add an A record  aits.need4deed.org → $(curl -sf ifconfig.me || hostname -I | awk '{print $1}')"
 echo ""
 echo "Then apply manifests:"
 echo "  cd $INFRA_DIR && kubectl apply -k overlays/dev/"
