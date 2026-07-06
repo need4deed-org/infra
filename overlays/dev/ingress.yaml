@@ -17,6 +17,16 @@ spec:
                 name: be
                 port:
                   number: 8000
+    - host: dev.need4deed.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: be
+                port:
+                  number: 8000
   tls:
     - hosts:
         - aits.need4deed.org
