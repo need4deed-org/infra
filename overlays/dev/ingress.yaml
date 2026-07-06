@@ -20,3 +20,4 @@ spec:
   tls:
     - hosts:
         - aits.need4deed.org
+        - dev.need4deed.org
