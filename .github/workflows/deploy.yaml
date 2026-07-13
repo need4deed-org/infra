@@ -8,6 +8,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Apply k8s secrets
         uses: appleboy/ssh-action@v1
@@ -19,13 +22,20 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
           SLACK_COMMENTS_WEBHOOK_URL: ${{ secrets.SLACK_COMMENTS_WEBHOOK_URL }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.AITS_HOST }}
           username: ubuntu
           key: ${{ secrets.AITS_SSH_KEY }}
-          envs: DB_PASSWORD,JWT_SECRET,SMTP_PASS,SMTP_NOTIFY_PASS,BREVO_API_KEY,SLACK_OPS_WEBHOOK_URL,SLACK_COMMENTS_WEBHOOK_URL
+          envs: DB_PASSWORD,JWT_SECRET,SMTP_PASS,SMTP_NOTIFY_PASS,BREVO_API_KEY,SLACK_OPS_WEBHOOK_URL,SLACK_COMMENTS_WEBHOOK_URL,GHCR_TOKEN
           script: |
             kubectl create namespace n4d-dev --dry-run=client -o yaml | kubectl apply -f -
+
+            kubectl create secret docker-registry ghcr-secret -n n4d-dev \
+              --docker-server=ghcr.io \
+              --docker-username=need4deed \
+              --docker-password="$GHCR_TOKEN" \
+              --save-config --dry-run=client -o yaml | kubectl apply -f -
 
             kubectl create secret generic postgres-secret -n n4d-dev \
               --from-literal=POSTGRES_DB=n4d \
