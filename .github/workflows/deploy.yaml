@@ -9,7 +9,58 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Apply manifests on AITS
+      - name: Apply k8s secrets
+        uses: appleboy/ssh-action@v1
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_NOTIFY_PASS: ${{ secrets.SMTP_NOTIFY_PASS }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
+          SLACK_COMMENTS_WEBHOOK_URL: ${{ secrets.SLACK_COMMENTS_WEBHOOK_URL }}
+        with:
+          host: ${{ secrets.AITS_HOST }}
+          username: ubuntu
+          key: ${{ secrets.AITS_SSH_KEY }}
+          envs: DB_PASSWORD,JWT_SECRET,SMTP_PASS,SMTP_NOTIFY_PASS,BREVO_API_KEY,SLACK_OPS_WEBHOOK_URL,SLACK_COMMENTS_WEBHOOK_URL
+          script: |
+            kubectl create namespace n4d-dev --dry-run=client -o yaml | kubectl apply -f -
+
+            kubectl create secret generic postgres-secret -n n4d-dev \
+              --from-literal=POSTGRES_DB=n4d \
+              --from-literal=POSTGRES_USER=n4d \
+              --from-literal=POSTGRES_PASSWORD="$DB_PASSWORD" \
+              --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+            kubectl create secret generic be-secret -n n4d-dev \
+              --from-literal=DB_HOST=postgres \
+              --from-literal=DB_PORT=5432 \
+              --from-literal=DB_USER=n4d \
+              --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+              --from-literal=DB_NAME=n4d \
+              --from-literal=DB_SCHEMA=public \
+              --from-literal=JWT_SECRET="$JWT_SECRET" \
+              --from-literal=NODE_ENV=development \
+              --from-literal=RUN_MIGRATIONS=true \
+              --from-literal=CORS_ORIGINS="http://localhost:3000,http://localhost:5173,http://vmpub:3000,chrome-extension://dmhljjnonlhapikmelaefohecogokhio" \
+              --from-literal=CORS_CREDENTIALS=true \
+              --from-literal=EMAIL_FROM=no-reply@need4deed.org \
+              --from-literal=SMTP_HOST=mail.infomaniak.com \
+              --from-literal=SMTP_PORT=587 \
+              --from-literal=SMTP_USER=dev@need4deed.org \
+              --from-literal=SMTP_PASS="$SMTP_PASS" \
+              --from-literal=EMAIL_FROM_NOTIFY=coordinators@need4deed.org \
+              --from-literal=SMTP_NOTIFY_HOST=mail.infomaniak.com \
+              --from-literal=SMTP_NOTIFY_PORT=587 \
+              --from-literal=SMTP_NOTIFY_USER=coordinators@need4deed.org \
+              --from-literal=SMTP_NOTIFY_PASS="$SMTP_NOTIFY_PASS" \
+              --from-literal=BREVO_API_KEY="$BREVO_API_KEY" \
+              --from-literal=SLACK_OPS_WEBHOOK_URL="$SLACK_OPS_WEBHOOK_URL" \
+              --from-literal=SLACK_COMMENTS_WEBHOOK_URL="$SLACK_COMMENTS_WEBHOOK_URL" \
+              --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply manifests
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.AITS_HOST }}
