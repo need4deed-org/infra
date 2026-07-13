@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
     steps:
       - name: Apply k8s secrets
         uses: appleboy/ssh-action@v1
@@ -22,7 +21,7 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
           SLACK_COMMENTS_WEBHOOK_URL: ${{ secrets.SLACK_COMMENTS_WEBHOOK_URL }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PAT }}
         with:
           host: ${{ secrets.AITS_HOST }}
           username: ubuntu
