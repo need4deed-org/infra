@@ -65,7 +65,7 @@ spec:
                   # has quietly stopped.
                   run check
                   run backup --type=full
-                  pgbackrest --stanza=n4d info
+                  run info
 
                   if [ -n "${DEADMAN_URL:-}" ]; then
                     curl -sS --max-time 15 "$DEADMAN_URL" >/dev/null \
