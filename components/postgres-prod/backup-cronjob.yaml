@@ -10,6 +10,9 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
+      # concurrencyPolicy is Forbid, so a pgbackrest stalled against the object
+      # storage would suppress every later run and never reach notify().
+      activeDeadlineSeconds: 3600
       template:
         metadata:
           labels:
@@ -21,11 +24,13 @@ spec:
             runAsUser: 999
             runAsGroup: 999
             runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: pgbackrest
-              # Same image as the StatefulSet; keep the two digests in step.
-              # PLACEHOLDER: see components/postgres/statefulset.yaml.
-              image: ghcr.io/need4deed-org/postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              # Rewritten to the pinned pgBackRest build by the images: entry in
+              # this component's kustomization.yaml, same as the StatefulSet.
+              image: postgres:17
               command: [bash, -c]
               args:
                 - |
@@ -33,17 +38,17 @@ spec:
 
                   notify() {
                     if [ -z "${SLACK_OPS_WEBHOOK_URL:-}" ]; then
-                      echo "SLACK_OPS_WEBHOOK_URL unset: this failure went unreported" >&2
+                      echo "SLACK_OPS_WEBHOOK_URL unset, unreported: ${1}" >&2
                       return 0
                     fi
                     curl -sS --max-time 15 -X POST -H 'Content-Type: application/json' \
-                      --data "{\"text\":\"pg-backup failed at ${1}\"}" \
+                      --data "{\"text\":\"pg-backup: ${1}\"}" \
                       "$SLACK_OPS_WEBHOOK_URL" >/dev/null || true
                   }
 
                   run() {
                     echo "--- pgbackrest $*"
-                    pgbackrest --stanza=n4d "$@" || { notify "$1"; exit 1; }
+                    pgbackrest --stanza=n4d "$@" || { notify "$1 failed"; exit 1; }
                   }
 
                   # pgBackRest does not create log-path and would run without a
@@ -59,7 +64,16 @@ spec:
                   done
                   pg_isready || { notify "postgres unreachable"; exit 1; }
 
-                  run stanza-create
+                  # Unconditional stanza-create would rebuild an empty stanza
+                  # after the repository is lost, and check, backup and info
+                  # would all then pass against it: total loss of every recovery
+                  # point would report success. Status code 1 is a missing
+                  # stanza and nothing else. Expected once, on a new repository.
+                  if pgbackrest --stanza=n4d info --output=json \
+                       | grep -q '"status":{"code":1'; then
+                    notify "no stanza in the repository, creating it. On an established repository this means the backup history is gone."
+                    run stanza-create
+                  fi
                   # check forces a WAL switch and confirms the segment reached
                   # the repo. It is the only step that catches archiving that
                   # has quietly stopped.

@@ -10,3 +10,14 @@ resources:
   - network-policies.yaml
 patches:
   - path: statefulset-patch.yaml
+# The StatefulSet and the backup CronJob must run the same build; one entry
+# keeps them in step. Pinned by digest: a silent 17.x bump under the only
+# stateful component must be a reviewed change. Dev keeps stock postgres:17,
+# which is why this lives here and not in components/postgres.
+# PLACEHOLDER: replace with the digest printed by the first run of
+# .github/workflows/build-postgres-image.yaml. Until then the pod cannot pull,
+# which is the intended direction to fail in.
+images:
+  - name: postgres
+    newName: ghcr.io/need4deed-org/postgres
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

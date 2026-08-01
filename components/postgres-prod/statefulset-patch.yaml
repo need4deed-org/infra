@@ -57,6 +57,23 @@ spec:
                 name: postgres-secret
             - secretRef:
                 name: pgbackrest-secret
+          # Both arrive through envFrom already. Named again as required keys so
+          # that a missing one stops the pod: 10-roles.sh runs after initdb has
+          # written PG_VERSION, so failing there leaves a cluster that never
+          # runs the init directory again and has neither role, while staying
+          # Ready. The only symptom would be the nightly backup failing to
+          # authenticate.
+          env:
+            - name: N4D_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: N4D_APP_PASSWORD
+            - name: PG_BACKUP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pgbackrest-secret
+                  key: PG_BACKUP_PASSWORD
           volumeMounts:
             - name: postgres-tls
               mountPath: /etc/postgres-tls

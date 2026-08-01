@@ -22,16 +22,43 @@ spec:
         runAsNonRoot: true
         fsGroup: 999
         fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # PGDATA moved into a subdirectory of the volume and postgres does not
+        # migrate a cluster that is at the root: it would initdb into the empty
+        # subdirectory and orphan the old files. overlays/dev is applied
+        # unattended, so refuse to start rather than lose the database quietly.
+        - name: assert-pgdata-layout
+          image: postgres:17
+          command: [sh, -c]
+          args:
+            - |
+              test ! -f /var/lib/postgresql/data/PG_VERSION && exit 0
+              echo "cluster at the volume root: see docs/runbooks/db-restore.md, Applying this to an existing volume" >&2
+              exit 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
       containers:
         - name: postgres
-          # Built from images/postgres: archive_command runs inside this
-          # container, so pgBackRest has to be in the image. Pinned by digest —
-          # a silent 17.x bump under the only stateful component must be a
-          # reviewed change.
-          # PLACEHOLDER: replace with the digest printed by the first run of
-          # .github/workflows/build-postgres-image.yaml. Until then the pod
-          # cannot pull, which is the intended direction to fail in.
-          image: ghcr.io/need4deed-org/postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          # components/postgres-prod swaps this for the pgBackRest image it pins
+          # by digest: archive_command runs inside this container, so pgBackRest
+          # has to be in the image wherever archiving is on.
+          image: postgres:17
           ports:
             - containerPort: 5432
           envFrom:
@@ -41,6 +68,8 @@ spec:
             # A subdirectory, not the volume root: the entrypoint only chowns
             # PGDATA when it runs as root, so as uid 999 only a directory it
             # creates itself can be chmodded to the 0700 postgres demands.
+            # An existing volume is not migrated by this: see
+            # docs/runbooks/db-restore.md, "Applying this to an existing volume".
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
             - name: POSTGRES_INITDB_ARGS

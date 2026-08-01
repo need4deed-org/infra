@@ -3,9 +3,12 @@
 # Key material never enters git: output goes to the gitignored .tls/<namespace>/.
 # Usage: bash scripts/gen-postgres-tls.sh <namespace>
 set -euo pipefail
+# openssl writes the keys at the ambient umask; the chmod below is too late to
+# stop anything reading them in the meantime.
+umask 077
 
 NAMESPACE="${1:-}"
-if [ -z "$NAMESPACE" ]; then
+if ! [[ "$NAMESPACE" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]]; then
   echo "usage: $0 <namespace>" >&2
   exit 1
 fi
