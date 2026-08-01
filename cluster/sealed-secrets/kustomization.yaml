@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Cluster add-on, applied once per cluster by bootstrap — not from an app
+# Cluster add-on, applied once per cluster by bootstrap, not from an app
 # overlay: overlays/* set `namespace:`, which would relocate the controller
 # out of kube-system and break both its RBAC and the kubeseal defaults.
 #
