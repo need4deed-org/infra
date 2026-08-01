@@ -41,13 +41,29 @@ spec:
       size: 128Mi
 EOF
 
-echo "=== 4/4  Cloning infra repo ==="
+echo "=== 4/5  Cloning infra repo ==="
 sudo git clone "$INFRA_REPO" "$INFRA_DIR"
 sudo chown -R "$USER:$USER" "$INFRA_DIR"
+
+echo "=== 5/5  Installing the SealedSecrets controller ==="
+# Applied from the repo, not dropped into the k3s auto-deploy directory: that
+# channel takes rendered manifests only, which would fork the pinned digest
+# away from cluster/sealed-secrets/.
+kubectl apply -k "$INFRA_DIR/cluster/sealed-secrets"
+kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
 
 echo ""
 echo "=================================================================="
 echo "Bootstrap complete."
+echo ""
+echo "DO THIS FIRST. Export the sealing key and put it in the team vault:"
+echo ""
+echo "  kubectl get secret -n kube-system \\"
+echo "    -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml"
+echo ""
+echo "The controller has just generated a private key that exists nowhere else."
+echo "Lose it and every secret sealed against this cluster is unrecoverable."
+echo "Full procedure, including the offline verification: docs/runbooks/sealing-keys.md"
 echo ""
 echo "Secrets and manifests are managed by the deploy-dev CI workflow."
 echo "Trigger it from GitHub to apply secrets and deploy all resources:"
