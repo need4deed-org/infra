@@ -111,9 +111,11 @@ Today every secret lives in the GitHub org and reaches the cluster as `kubectl c
 
 **Mechanism: SealedSecrets.** The controller (`cluster/sealed-secrets/`, installed per cluster by the bootstrap script) generates an RSA keypair that never leaves the cluster. `scripts/seal-secret.sh` encrypts a value against that cluster's public cert; the ciphertext is committed under `secrets/<cluster>/<namespace>/<name>.yaml` and only that cluster can open it. Git and CI carry ciphertext only. Full procedures in [`docs/runbooks/sealing-keys.md`](docs/runbooks/sealing-keys.md).
 
-Dev keeps its plaintext dummies. Sealing starts at pre and prod: a blob sealed against AITS cannot be decrypted on a local k3d cluster, and `overlays/dev` has to stay portable across both.
+Sealing starts at `n4d-pre` and prod. A blob sealed against AITS cannot be decrypted on a local k3d cluster, and `overlays/dev` is applied to both, so it has to stay portable: the Secrets it consumes cannot come from `secrets/`.
 
-**Cutover, per cluster, in this order.** AITS carries both `n4d-dev` and `n4d-pre` under one key; prod is a second key.
+That scopes the payoff. What CI writes into `n4d-dev` on AITS today is not dummy data. It is the live `mail.infomaniak.com` passwords for dev@ and coordinators@, the Brevo key and both Slack webhooks, and those stay in the GitHub org until `overlays/dev` is split into a portable local overlay and an AITS one that can include sealed blobs.
+
+**Cutover, per cluster, in this order.** For `n4d-pre` on AITS and for prod. `n4d-dev` waits on that overlay split. AITS carries both `n4d-dev` and `n4d-pre` under one key; prod is a second key.
 
 - [ ] Install the controller: `kubectl apply -k cluster/sealed-secrets` (bootstrap does this on a fresh VPS).
 - [ ] **Export the sealing key and put it in the team vault.** Not in git, not in the GitHub org. Lose it and every committed blob for that cluster is unrecoverable.

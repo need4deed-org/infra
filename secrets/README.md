@@ -32,6 +32,11 @@ The plaintext input file must live outside this repo; the script refuses
 otherwise. `ghcr-secret` is a `kubernetes.io/dockerconfigjson` and is sealed
 with `--dockerconfigjson`, from a file, so the PAT never reaches argv.
 
+`--from-env-file` is a literal parser: one `KEY=value` per line, no quotes, no
+trailing whitespace, no multi-line values. Quotes and stray spaces are sealed as
+part of the value and nothing downstream compares the result to its source, so
+check the byte counts `seal` prints per key before committing.
+
 After sealing, add the file to that namespace directory's `kustomization.yaml`
 and include the directory from the overlay that deploys to that cluster.
 

@@ -12,7 +12,7 @@ die() { echo "error: $*" >&2; exit 1; }
 usage() {
   cat >&2 <<'EOF'
 usage:
-  seal-secret.sh fetch-cert <cluster> [--context CTX]
+  seal-secret.sh fetch-cert <cluster> --context CTX [--force]
   seal-secret.sh seal <cluster> <namespace> <name> --env-file PATH [--force]
   seal-secret.sh seal <cluster> <namespace> <name> --dockerconfigjson PATH [--force]
 
@@ -21,10 +21,13 @@ EOF
   exit 2
 }
 
-require_kubeseal() {
+require_tools() {
   command -v kubeseal >/dev/null \
     || die "kubeseal is not on PATH. Install the pinned release: see docs/runbooks/sealing-keys.md"
+  command -v openssl >/dev/null || die "openssl is not on PATH"
 }
+
+cert_fp() { openssl x509 -in "$1" -noout -fingerprint -sha256 | cut -d= -f2; }
 
 # Names land in file paths as well as in Kubernetes objects.
 check_name() {
@@ -44,23 +47,36 @@ cmd_fetch_cert() {
   local cluster=${1:-}
   [ -n "$cluster" ] || usage
   shift
-  local -a ctx=()
+  local context="" force=0
   while [ $# -gt 0 ]; do
     case $1 in
-      --context) [ -n "${2:-}" ] || usage; ctx=(--context "$2"); shift 2 ;;
+      --context) [ -n "${2:-}" ] || usage; context=$2; shift 2 ;;
+      --force) force=1; shift ;;
       *) usage ;;
     esac
   done
   check_name cluster "$cluster"
-  require_kubeseal
+  # Nothing else ties <cluster> to the cluster the cert comes from, so make the
+  # operator name both and put them side by side in the output.
+  [ -n "$context" ] || die "--context is required: <cluster> is a directory name, not a target"
+  require_tools
 
   local out="$REPO_ROOT/secrets/$cluster/pub-cert.pem"
   mkdir -p "$(dirname "$out")"
   TMPFILE="$out.tmp"
-  kubeseal --fetch-cert "${ctx[@]}" > "$TMPFILE"
+  kubeseal --fetch-cert --context "$context" > "$TMPFILE"
+
+  if [ -e "$out" ] && [ "$force" != 1 ]; then
+    echo "$out exists" >&2
+    echo "  on disk:  $(cert_fp "$out")" >&2
+    echo "  fetched:  $(cert_fp "$TMPFILE")  (context $context)" >&2
+    die "replacing it re-points every future seal for '$cluster'. Re-fetch with --force."
+  fi
   mv "$TMPFILE" "$out"
 
   echo "wrote $out"
+  echo "  cert sha256: $(cert_fp "$out")"
+  echo "  from context: $context"
   echo "Commit it: the cert is public, and it records which key a blob was sealed against."
 }
 
@@ -82,10 +98,10 @@ cmd_seal() {
   check_name name "$name"
   [ -n "$env_file$dockerconfig" ] || die "one of --env-file / --dockerconfigjson is required"
   [ -z "$env_file" ] || [ -z "$dockerconfig" ] || die "--env-file and --dockerconfigjson are mutually exclusive"
-  require_kubeseal
+  require_tools
 
   local cert="$REPO_ROOT/secrets/$cluster/pub-cert.pem"
-  [ -f "$cert" ] || die "no cert at $cert. Run: seal-secret.sh fetch-cert $cluster"
+  [ -f "$cert" ] || die "no cert at $cert. Run: seal-secret.sh fetch-cert $cluster --context <ctx>"
 
   local out="$REPO_ROOT/secrets/$cluster/$namespace/$name.yaml"
   [ ! -e "$out" ] || [ "$force" = 1 ] || die "$out exists. Re-seal with --force."
@@ -103,11 +119,22 @@ cmd_seal() {
 
   mkdir -p "$(dirname "$out")"
   TMPFILE="$out.tmp"
-  "${create[@]}" --dry-run=client -o yaml \
+  # In a variable, not a file: plaintext still never touches disk.
+  local rendered
+  rendered=$("${create[@]}" --dry-run=client -o yaml)
+  printf '%s\n' "$rendered" \
     | kubeseal --cert "$cert" --format yaml --scope strict > "$TMPFILE"
   mv "$TMPFILE" "$out"
 
   echo "wrote $out"
+  echo "  cert sha256: $(cert_fp "$cert")"
+  # --from-env-file is a literal parser: it keeps quotes, trailing spaces and a
+  # literal \n. Nothing downstream compares the sealed value to its source, so
+  # the byte counts are the only chance to catch it before the commit.
+  while read -r key b64; do
+    printf '  %-30s %s bytes\n' "$key" "$(printf '%s' "$b64" | base64 -d | wc -c)"
+  done < <(printf '%s\n' "$rendered" \
+    | awk '/^data:/{d=1;next} d&&/^[^ ]/{d=0} d&&/^  /{sub(/:$/,"",$1); gsub(/"/,"",$2); print $1, $2}')
   echo ""
   echo "Still owed:"
   echo "  1. add $name.yaml to secrets/$cluster/$namespace/kustomization.yaml"

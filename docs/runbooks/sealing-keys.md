@@ -46,21 +46,30 @@ Do this before sealing anything. The controller has just generated a private
 key that exists nowhere else.
 
 ```bash
-kubectl get secret -n kube-system \
-  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > <cluster>-sealing-key.yaml
+( umask 077
+  kubectl get secret -n kube-system \
+    -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > ~/<cluster>-sealing-key.yaml )
 ```
+
+Outside the worktree, and never to the terminal. The default umask writes 0644,
+which on the VPS is readable by every local account; `~` keeps the file out of
+reach of a `git add -A`, and `.gitignore` covers `*sealing-key*.yaml` as a
+backstop, not as the control.
 
 The output is a `v1.List` and is safe to restore with `kubectl apply -f` as it
 stands: the recorded `resourceVersion` and `uid` do not block a re-create.
 
 Where it goes: the team vault, one entry per cluster, named for the cluster.
-Encrypted before it leaves the machine, or into a vault that encrypts it.
+Encrypted before it leaves the machine, or into a vault that encrypts it. Put
+the cert fingerprint that `seal-secret.sh fetch-cert` prints in the same entry:
+that is what tells you later whether `secrets/<cluster>/pub-cert.pem` still
+belongs to the vaulted key.
 
 Where it does **not** go: git, and **not the GitHub org**. Putting the sealing
 key in GitHub Actions secrets recreates exactly the exposure this mechanism
 exists to remove.
 
-Delete the local copy when it is in the vault.
+`shred -u ~/<cluster>-sealing-key.yaml` once it is in the vault.
 
 ## 3. Verify the backup offline
 
@@ -69,7 +78,7 @@ cluster, with no cluster contact, against a blob that is actually committed.
 
 ```bash
 KUBECONFIG=/dev/null kubeseal --recovery-unseal \
-  --recovery-private-key <cluster>-sealing-key.yaml \
+  --recovery-private-key ~/<cluster>-sealing-key.yaml \
   < secrets/<cluster>/<namespace>/<name>.yaml -o yaml
 ```
 
@@ -80,43 +89,70 @@ outage.
 
 ## 4. Disaster recovery
 
-Order matters, and the wrong order is silently destructive.
-
-Restore the key **before** applying any overlay. If you apply first, the
-controller starts with no key, mints a fresh one, and every committed blob is
-now undecryptable by this cluster. Nothing warns you; the apply succeeds.
+Order matters, and the wrong order is silently destructive. Restore the key
+**before** the controller starts: it adopts the restored key instead of minting
+one, and nothing needs restarting.
 
 ```bash
-# 1. install the controller
+# 1. restore the vaulted key. kube-system exists on a fresh cluster and a
+#    Secret needs no CRD, so this runs before anything is installed.
+kubectl apply -f ~/<cluster>-sealing-key.yaml
+
+# 2. install the controller
 kubectl apply -k cluster/sealed-secrets
 kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
 
-# 2. restore the vaulted key
-kubectl apply -f <cluster>-sealing-key.yaml
-
-# 3. restart the controller so it loads it
-kubectl -n kube-system rollout restart deploy/sealed-secrets-controller
-kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
-
-# 4. only now apply the overlay
+# 3. only now apply the overlay
 kubectl apply -k overlays/<env>
 ```
 
-Step 3 is not optional. Restoring the key while the controller is running has no
-effect: rehearsed twice, the SealedSecrets were still `Synced=False` after the
-15 and 20 seconds we waited, and stayed that way. The controller exhausts its
-retry budget for a failing SealedSecret in a fraction of a second (`Error
-updating, giving up`) and does not reconsider until it restarts. The
-`--watch-for-secrets` flag does not remove the restart either: it registers a
-key added out of band (`registered private key secretname=...` appears in the
-log) but does not re-drive the SealedSecrets that already gave up. That is why
-we leave it off.
+Rehearsed on a fresh cluster: one key in `kube-system`, `kubeseal --fetch-cert`
+returns the vaulted cert, and a blob sealed against it goes `Synced=True`
+without a restart anywhere.
 
-If step 1 already minted a fresh key before you restored the vaulted one, both
-keys will be present. That is harmless: the controller decrypts with any key in
-the keyring. Delete the surplus key only after step 4 verifies clean.
+### If the controller started first
 
-Verify:
+`scripts/bootstrap.sh` installs it, so on a rebuilt VPS this is the normal case.
+The controller has already minted a key of its own, and the restored one is not
+in the keyring.
+
+```bash
+kubectl apply -f ~/<cluster>-sealing-key.yaml
+kubectl -n kube-system rollout restart deploy/sealed-secrets-controller
+kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
+
+# the surplus key is the one kubeseal seals against: remove it, restart again
+kubectl -n kube-system delete secret <surplus-key>
+kubectl -n kube-system rollout restart deploy/sealed-secrets-controller
+kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
+
+# and confirm the committed cert is the vaulted key again
+scripts/seal-secret.sh fetch-cert <cluster> --context <ctx> --force
+git diff secrets/<cluster>/pub-cert.pem   # expect no change
+```
+
+The surplus key is not harmless, and neither half of removing it can be
+skipped. kubeseal is served the newest key by `NotBefore`, which is the freshly
+minted one, so anything sealed before it is gone is protected by a key that
+exists in the cluster and not in the vault. Deleting the Secret does not remove
+it from the running controller either: the keyring is built at startup only.
+Rehearsed: after `delete secret` with no restart, `--fetch-cert` still returned
+the deleted key, a blob sealed against it applied `Synced=True`, and the first
+controller restart after that left it `no key could decrypt secret (...)`, with
+the private key gone from both the cluster and the vault. Seal nothing until
+the surplus key is deleted, the controller restarted, and the cert re-checked.
+
+The restart after a restore is not optional either: restoring the key while the
+controller is running has no effect. Rehearsed twice, the SealedSecrets were
+still `Synced=False` after the 15 and 20 seconds we waited, and stayed that way.
+The controller exhausts its retry budget for a failing SealedSecret in a
+fraction of a second (`Error updating, giving up`) and does not reconsider until
+it restarts. The `--watch-for-secrets` flag does not remove the restart either:
+it registers a key added out of band (`registered private key secretname=...`
+appears in the log) but does not re-drive the SealedSecrets that already gave
+up. That is why we leave it off.
+
+Verify, either way:
 
 ```bash
 kubectl get sealedsecrets -A \
@@ -170,9 +206,10 @@ kubectl -n kube-system rollout restart deploy/sealed-secrets-controller
 kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
 
 # 3. re-encrypt every committed blob for this cluster to the newest key
-scripts/seal-secret.sh fetch-cert <cluster> --context <ctx>
-for f in secrets/<cluster>/*/*.yaml; do
-  kubeseal --re-encrypt --format yaml < "$f" > "$f.new" && mv "$f.new" "$f"
+scripts/seal-secret.sh fetch-cert <cluster> --context <ctx> --force
+for f in $(find secrets/<cluster> -name '*.yaml' ! -name kustomization.yaml); do
+  kubeseal --re-encrypt --format yaml < "$f" > "$f.new" \
+    && mv "$f.new" "$f" || { rm -f "$f.new"; echo "FAILED: $f"; break; }
 done
 git commit -am "chore: re-encrypt <cluster> blobs after key rotation"
 kubectl apply -k overlays/<env>
@@ -194,9 +231,14 @@ Notes from the rehearsal:
   controller to decrypt with a key it still holds; delete first and step 3
   fails with `error decrypting secret. no key could decrypt secret (...)` and
   the blobs are unrecoverable from the cluster.
-- Order within step 3 does not matter, but step 5 must come after step 3 is
-  applied and verified. After step 5 the rehearsed blob still read
-  `Synced=True`, which is the check to repeat.
+- The loop must stop on the first failure and must not reach `kustomization.yaml`.
+  Pasted into a shell there is no `set -e`, so a blob that fails to re-encrypt
+  is left at its old ciphertext and `git commit -am` cannot tell that run from a
+  complete one. `--re-encrypt` on a `kustomization.yaml` exits 1, or exits 0 with
+  empty output if the file has no `apiVersion`, and then the `mv` truncates it.
+- Step 5 deletes the old key, so before it, every blob must be re-encrypted and
+  applied: run the `kubectl get sealedsecrets -A` check from section 4 and
+  require `Synced=True` for all of them, not just the one you rehearsed with.
 - `--re-encrypt` needs cluster access and the API server's service proxy. It
   changes the ciphertext, not the plaintext, and the result opens with the new
   key alone.
@@ -222,10 +264,23 @@ image, a VPS snapshot, or root on the node still yields every secret. The
 control for that is full-disk encryption, which is a separate decision and has
 to be made before the prod VPS carries real data.
 
+Any local account on the node reads them too, and full-disk encryption does
+nothing about that: `bootstrap.sh` sets `K3S_KUBECONFIG_MODE=644` so that the
+deploy workflow's `ubuntu` user can run `kubectl` without sudo, and that
+kubeconfig is `system:masters`. Since this cluster now holds a key that decrypts
+every version of every blob in git history, tighten it (0640 plus a group, or a
+copy into the operator's `~/.kube/config`) before prod carries real data.
+
 The controller's `secrets-unsealer` ClusterRole grants get/list/create/update/
 delete/watch on Secrets in every namespace. Compromising the controller is
 equivalent to compromising every Secret in the cluster. That is how the tool
 works; do not read SealedSecrets as isolation between namespaces.
+
+Upstream's manifest also binds `system:authenticated` to a Role over the
+controller's `services/proxy`, so every ServiceAccount in the cluster, `be` and
+`fe` included, can reach the controller's HTTP API through the API server. That
+API returns ciphertext, not plaintext, so it is a re-encryption and DoS surface
+rather than disclosure. We keep the upstream default.
 
 ## 8. Cutover from CI-created Secrets
 
@@ -256,11 +311,23 @@ the value lives in the GitHub org. Per cluster, per Secret:
 
    Deleting the existing Secret instead of annotating it also works, at the
    cost of a window in which the Secret does not exist.
-5. Apply, and verify the value actually changed. Not `kubectl apply` output:
+5. Apply, then check both that it synced and that the values are the ones CI was
+   setting. Not `kubectl apply` output, and `Synced=True` only proves that the
+   ciphertext round-tripped:
 
    ```bash
+   # before step 4, while the CI-created Secret is still live
+   kubectl -n <ns> get secret <name> -o jsonpath='{.data}' | sha256sum
+
+   # after applying the SealedSecret
    kubectl -n <ns> get sealedsecret <name> -o jsonpath='{.status.conditions[*].status}'
+   kubectl -n <ns> get secret <name> -o jsonpath='{.data}' | sha256sum
    ```
+
+   Same digest, or a diff you can account for key by key. `--from-env-file` is a
+   literal parser: a value transcribed with its quotes or a trailing space seals,
+   applies and syncs exactly like a correct one, and step 6 then deletes the last
+   copy of the right value.
 6. Only then remove that `kubectl create secret` block from
    `.github/workflows/deploy.yaml`, and only then delete the corresponding
    GitHub Actions secret from the org. That last deletion is where this work

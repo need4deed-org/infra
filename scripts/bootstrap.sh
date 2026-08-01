@@ -12,17 +12,17 @@ INFRA_DIR=/opt/infra
 # k3s writes its kubeconfig as root-only by default; this makes it world-readable.
 K3S_KUBECONFIG_MODE=644
 
-echo "=== 1/4  Installing k3s ==="
+echo "=== 1/5  Installing k3s ==="
 curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE=644 sh -
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-echo "=== 2/4  Waiting for node to be Ready ==="
+echo "=== 2/5  Waiting for node to be Ready ==="
 until kubectl get nodes 2>/dev/null | grep -q " Ready"; do
   printf '.'; sleep 3
 done
 echo ""
 
-echo "=== 3/4  Configuring Traefik for Let's Encrypt ==="
+echo "=== 3/5  Configuring Traefik for Let's Encrypt ==="
 # k3s watches /var/lib/rancher/k3s/server/manifests/ and applies changes automatically.
 sudo tee /var/lib/rancher/k3s/server/manifests/traefik-config.yaml > /dev/null <<EOF
 apiVersion: helm.cattle.io/v1
@@ -42,15 +42,25 @@ spec:
 EOF
 
 echo "=== 4/5  Cloning infra repo ==="
-sudo git clone "$INFRA_REPO" "$INFRA_DIR"
-sudo chown -R "$USER:$USER" "$INFRA_DIR"
+# Re-runnable: a second run must reach the controller install below, not abort
+# on an existing clone.
+if [ -d "$INFRA_DIR/.git" ]; then
+  sudo chown -R "$USER:$USER" "$INFRA_DIR"
+  git -C "$INFRA_DIR" pull
+else
+  sudo git clone "$INFRA_REPO" "$INFRA_DIR"
+  sudo chown -R "$USER:$USER" "$INFRA_DIR"
+fi
 
 echo "=== 5/5  Installing the SealedSecrets controller ==="
 # Applied from the repo, not dropped into the k3s auto-deploy directory: that
 # channel takes rendered manifests only, which would fork the pinned digest
 # away from cluster/sealed-secrets/.
 kubectl apply -k "$INFRA_DIR/cluster/sealed-secrets"
-kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
+# A slow image pull must not abort the script: the key-export instruction below
+# is the one message that has to be read.
+kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s \
+  || echo "controller not ready yet. Re-check: kubectl -n kube-system rollout status deploy/sealed-secrets-controller"
 
 echo ""
 echo "=================================================================="
@@ -58,11 +68,17 @@ echo "Bootstrap complete."
 echo ""
 echo "DO THIS FIRST. Export the sealing key and put it in the team vault:"
 echo ""
-echo "  kubectl get secret -n kube-system \\"
-echo "    -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml"
+echo "  ( umask 077; kubectl get secret -n kube-system \\"
+echo "      -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml \\"
+echo "      > ~/<cluster>-sealing-key.yaml )"
 echo ""
 echo "The controller has just generated a private key that exists nowhere else."
 echo "Lose it and every secret sealed against this cluster is unrecoverable."
+echo "Never print it to the terminal, and shred -u the file once it is vaulted."
+echo ""
+echo "Rebuilding a cluster that already has a vaulted key? Do not export this one."
+echo "Restore the vaulted key and delete the one just minted, before sealing"
+echo "anything: docs/runbooks/sealing-keys.md section 4."
 echo "Full procedure, including the offline verification: docs/runbooks/sealing-keys.md"
 echo ""
 echo "Secrets and manifests are managed by the deploy-dev CI workflow."
