@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Cluster add-on, applied once per cluster by bootstrap — not from an app
+# overlay: overlays/* set `namespace:`, which would relocate the controller
+# out of kube-system and break both its RBAC and the kubeseal defaults.
+#
+# controller.yaml is the v0.38.4 release asset, byte-identical:
+#   https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.38.4/controller.yaml
+#   sha256 8334764279b7dc3c758ce954c5e08cbf6d959bd977db49b872b2b722a123b202
+# (upstream checksums.txt covers only the kubeseal tarballs, so we record ours)
+# Every local change is a patch below, so an upgrade is: re-download, diff, bump.
+resources:
+  - controller.yaml
+
+images:
+  # name must match the manifest string verbatim, docker.io/ prefix included,
+  # or the transformer silently no-ops.
+  - name: docker.io/bitnami/sealed-secrets-controller
+    digest: sha256:ab8e4687a97fb097f30ca2f028222f779f231c224555ba05f43d172c61f84497
+
+patches:
+  # Automatic key renewal off (upstream default 720h). With it on the cluster
+  # mints keys that are not in the vault, silently, and the gap surfaces during
+  # a restore. Rotation becomes a runbook action: docs/runbooks/sealing-keys.md
+  - target:
+      kind: Deployment
+      name: sealed-secrets-controller
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: sealed-secrets-controller
+        namespace: kube-system
+      spec:
+        template:
+          spec:
+            containers:
+              - name: sealed-secrets-controller
+                args:
+                  - --key-renew-period=0
