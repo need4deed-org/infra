@@ -6,5 +6,7 @@ resources:
   - pg-hba-configmap.yaml
   - pgbackrest-configmap.yaml
   - init-roles-configmap.yaml
+  - backup-cronjob.yaml
+  - network-policies.yaml
 patches:
   - path: statefulset-patch.yaml

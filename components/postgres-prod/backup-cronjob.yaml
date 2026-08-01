@@ -1,0 +1,136 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-backup
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: pg-backup
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            runAsNonRoot: true
+          containers:
+            - name: pgbackrest
+              # Same image as the StatefulSet; keep the two digests in step.
+              # PLACEHOLDER: see components/postgres/statefulset.yaml.
+              image: ghcr.io/need4deed-org/postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000
+              command: [bash, -c]
+              args:
+                - |
+                  set -euo pipefail
+
+                  notify() {
+                    if [ -z "${SLACK_OPS_WEBHOOK_URL:-}" ]; then
+                      echo "SLACK_OPS_WEBHOOK_URL unset: this failure went unreported" >&2
+                      return 0
+                    fi
+                    curl -sS --max-time 15 -X POST -H 'Content-Type: application/json' \
+                      --data "{\"text\":\"pg-backup failed at ${1}\"}" \
+                      "$SLACK_OPS_WEBHOOK_URL" >/dev/null || true
+                  }
+
+                  run() {
+                    echo "--- pgbackrest $*"
+                    pgbackrest --stanza=n4d "$@" || { notify "$1"; exit 1; }
+                  }
+
+                  # pgBackRest does not create log-path and would run without a
+                  # log file, which is the first thing needed when this fails.
+                  mkdir -p /tmp/pgbackrest
+
+                  # The CNI programs this pod's NetworkPolicy rules after the
+                  # container is already running, and pgbackrest connects within
+                  # milliseconds. Without this wait the job is refused on start.
+                  for _ in $(seq 1 30); do
+                    pg_isready -q && break
+                    sleep 2
+                  done
+                  pg_isready || { notify "postgres unreachable"; exit 1; }
+
+                  run stanza-create
+                  # check forces a WAL switch and confirms the segment reached
+                  # the repo. It is the only step that catches archiving that
+                  # has quietly stopped.
+                  run check
+                  run backup --type=full
+                  pgbackrest --stanza=n4d info
+
+                  if [ -n "${DEADMAN_URL:-}" ]; then
+                    curl -sS --max-time 15 "$DEADMAN_URL" >/dev/null \
+                      || echo "dead man's switch ping failed" >&2
+                  fi
+              env:
+                # pgBackRest has no TCP option for the database connection: with
+                # pg1-socket-path unset it omits `host` from the conninfo and
+                # libpq falls back to these. verify-full also proves the CA as a
+                # side effect of every backup.
+                - name: PGHOST
+                  value: postgres
+                - name: PGSSLMODE
+                  value: verify-full
+                - name: PGSSLROOTCERT
+                  value: /etc/postgres-ca/ca.crt
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: pgbackrest-secret
+                      key: PG_BACKUP_PASSWORD
+              envFrom:
+                - secretRef:
+                    name: pgbackrest-secret
+                - secretRef:
+                    name: pg-backup-alerts
+                    optional: true
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/postgresql/data
+                  readOnly: true
+                - name: pgbackrest-config
+                  mountPath: /etc/pgbackrest
+                  readOnly: true
+                - name: postgres-ca
+                  mountPath: /etc/postgres-ca
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+          volumes:
+            # pgBackRest only reads PGDATA during a backup: the backup label
+            # goes to the repo, not the data directory. Read-only makes the
+            # concurrent RWO mount safe, and it is same-node only, which one
+            # node makes legal.
+            - name: data
+              persistentVolumeClaim:
+                claimName: data-postgres-0
+                readOnly: true
+            - name: pgbackrest-config
+              configMap:
+                name: pgbackrest-config
+            - name: postgres-ca
+              secret:
+                secretName: postgres-ca
+            - name: tmp
+              emptyDir: {}
