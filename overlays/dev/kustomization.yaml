@@ -5,3 +5,5 @@ resources:
   - namespace.yaml
   - ../../base
   - ingress.yaml
+components:
+  - ../../components/postgres

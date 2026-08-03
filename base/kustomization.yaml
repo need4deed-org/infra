@@ -2,6 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - be/
-  - postgres/
+  - network-policies/
+  # postgres is a component, not a base resource: overlays opt in
+  # (components/postgres). An overlay on a managed database omits it.
   # workers/ — not ready yet; uncomment when the workers service is implemented
   # - workers/
