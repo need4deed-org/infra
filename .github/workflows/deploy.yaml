@@ -27,7 +27,10 @@ jobs:
           username: ubuntu
           key: ${{ secrets.AITS_SSH_KEY }}
           envs: DB_PASSWORD,JWT_SECRET,SMTP_PASS,SMTP_NOTIFY_PASS,BREVO_API_KEY,SLACK_OPS_WEBHOOK_URL,SLACK_COMMENTS_WEBHOOK_URL,GHCR_TOKEN
+          script_stop: true
           script: |
+            set -euo pipefail
+
             kubectl create namespace n4d-dev --dry-run=client -o yaml | kubectl apply -f -
 
             kubectl create secret docker-registry ghcr-secret -n n4d-dev \
@@ -86,7 +89,13 @@ jobs:
           host: ${{ secrets.AITS_HOST }}
           username: ubuntu
           key: ${{ secrets.AITS_SSH_KEY }}
+          script_stop: true
           script: |
+            set -euo pipefail
+
             cd /opt/infra
             git pull
             kubectl apply -k overlays/dev/
+            # A bad digest or missing secret otherwise fails invisibly: the
+            # old ReplicaSet keeps serving and the workflow stays green.
+            kubectl rollout status deployment/be -n n4d-dev --timeout=300s
