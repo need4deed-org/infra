@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cdn-proxy-config
+data:
+  # Mounted as the whole nginx.conf: proxy_cache_path is only valid in the
+  # http context, so a conf.d snippet cannot carry it.
+  nginx.conf: |
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /tmp/nginx.pid;
+
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+      access_log /var/log/nginx/access.log;
+      sendfile on;
+
+      client_body_temp_path /tmp/client_temp;
+      proxy_temp_path /tmp/proxy_temp;
+      fastcgi_temp_path /tmp/fastcgi_temp;
+      uwsgi_temp_path /tmp/uwsgi_temp;
+      scgi_temp_path /tmp/scgi_temp;
+      proxy_cache_path /tmp/cache levels=1:2 keys_zone=cdn:32m
+                       max_size=2g inactive=24h use_temp_path=off;
+
+      # Without this, nginx resolves the upstream once at startup and never
+      # again, so an origin IP change breaks the CDN until the pod restarts.
+      resolver 10.43.0.10 valid=60s ipv6=off;
+
+      server {
+        listen 8080;
+        server_name _;
+
+        location = /healthz {
+          access_log off;
+          return 200 "ok\n";
+        }
+
+        location / {
+          include /etc/nginx/cdn-origin.conf;
+          proxy_cache_valid 200 24h;
+          add_header Cache-Control "public, max-age=86400";
+        }
+
+        # Templates are fetched by the backend at send time; a bad template
+        # must be fixable without waiting out a day-long TTL.
+        location /emails/ {
+          include /etc/nginx/cdn-origin.conf;
+          proxy_cache_valid 200 5m;
+          add_header Cache-Control "public, max-age=300";
+        }
+      }
+    }
+  # Shared by every location block so the TLS settings cannot drift apart.
+  cdn-origin.conf: |
+    set $cdn_origin "s3.pub1.infomaniak.cloud";
+    proxy_pass https://$cdn_origin/object/v1/AUTH_PROJECT_ID/n4d-cdn$uri;
+
+    # Each of these fails silently against the shared Swift endpoint if
+    # omitted: nginx sends no SNI upstream by default and does not verify.
+    proxy_ssl_server_name on;
+    proxy_ssl_name s3.pub1.infomaniak.cloud;
+    proxy_ssl_verify on;
+    proxy_ssl_verify_depth 3;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    proxy_set_header Host s3.pub1.infomaniak.cloud;
+
+    # Public static content: forward no client credentials upstream.
+    proxy_set_header Cookie "";
+    proxy_set_header Authorization "";
+    proxy_set_header X-Auth-Token "";
+
+    limit_except GET HEAD {
+      deny all;
+    }
+
+    proxy_connect_timeout 5s;
+    proxy_send_timeout 30s;
+    proxy_read_timeout 30s;
+
+    proxy_cache cdn;
+    # Path only: query strings must not multiply cache entries.
+    proxy_cache_key $proxy_host$uri;
+    proxy_cache_valid 404 1m;
+    proxy_cache_lock on;
+    proxy_cache_lock_timeout 10s;
+    # Serve what we already have rather than an error when Swift is down.
+    proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+    proxy_cache_background_update on;
+
+    proxy_ignore_headers Set-Cookie Cache-Control Expires;
+    proxy_hide_header Set-Cookie;
+    proxy_hide_header Cache-Control;
+    proxy_hide_header Expires;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Cache-Status $upstream_cache_status always;
