@@ -42,6 +42,17 @@ jobs:
               --from-literal=POSTGRES_PASSWORD="$DB_PASSWORD" \
               --save-config --dry-run=client -o yaml | kubectl apply -f -
 
+            kubectl create secret generic bootstrap-secret -n n4d-dev \
+              --from-literal=DB_HOST=postgres \
+              --from-literal=DB_PORT=5432 \
+              --from-literal=DB_USER=n4d \
+              --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+              --from-literal=DB_NAME=n4d \
+              --from-literal=DB_SCHEMA=public \
+              --from-literal=NODE_ENV=development \
+              --from-literal=RUN_MIGRATIONS=true \
+              --save-config --dry-run=client -o yaml | kubectl apply -f -
+
             kubectl create secret generic be-secret -n n4d-dev \
               --from-literal=DB_HOST=postgres \
               --from-literal=DB_PORT=5432 \

@@ -16,11 +16,12 @@ spec:
         - name: ghcr-secret
       initContainers:
         - name: bootstrap
+          # Pinned to an immutable digest per overlay; never deploy the tag.
           image: ghcr.io/need4deed-org/bootstrap:latest
           imagePullPolicy: Always
           envFrom:
             - secretRef:
-                name: be-secret
+                name: bootstrap-secret
       containers:
         - name: be
           image: ghcr.io/need4deed-org/be:develop
