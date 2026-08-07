@@ -4,7 +4,6 @@ resources:
   - be/
   - fe/
   - cdn-proxy/
-  - postgres/
   - network-policies/
   # postgres is a component, not a base resource: overlays opt in
   # (components/postgres). An overlay on a managed database omits it.
