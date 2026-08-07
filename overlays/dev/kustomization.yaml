@@ -5,6 +5,8 @@ resources:
   - namespace.yaml
   - ../../base
   - ingress.yaml
+components:
+  - ../../components/postgres
 # Bump after a bootstrap rebuild:
 #   docker buildx imagetools inspect ghcr.io/need4deed-org/bootstrap:latest
 images:

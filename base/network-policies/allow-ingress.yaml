@@ -1,0 +1,68 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-traefik-to-web
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [be, fe, cdn-proxy]
+  policyTypes:
+    - Ingress
+  ingress:
+    # Both selectors sit in one peer so they AND: only Traefik, not every
+    # pod in kube-system.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-fe-to-be
+spec:
+  podSelector:
+    matchLabels:
+      app: be
+  policyTypes:
+    - Ingress
+  ingress:
+    # The frontend proxies /api/* to the backend server-side.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: fe
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-be-to-postgres
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: be
+      ports:
+        - protocol: TCP
+          port: 5432
