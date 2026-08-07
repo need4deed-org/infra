@@ -81,6 +81,16 @@ jobs:
               --from-literal=BREVO_API_KEY="$BREVO_API_KEY" \
               --from-literal=SLACK_OPS_WEBHOOK_URL="$SLACK_OPS_WEBHOOK_URL" \
               --from-literal=SLACK_COMMENTS_WEBHOOK_URL="$SLACK_COMMENTS_WEBHOOK_URL" \
+              --from-literal=CDN_BASE_URL=https://cdn.need4deed.org \
+              --from-literal=URL_EMAIL_VERIFICATION=https://aits.need4deed.org/verify-email \
+              --from-literal=URL_PASSWORD_RESET=https://aits.need4deed.org/reset-password \
+              --from-literal=NOTIFY_EMAIL_DRY_RUN=true \
+              --from-literal=NOTIFY_SLACK_DRY_RUN=true \
+              --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+            kubectl create secret generic fe-secret -n n4d-dev \
+              --from-literal=NODE_ENV=production \
+              --from-literal=PORT=3000 \
               --save-config --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply manifests
