@@ -80,6 +80,7 @@ _Need4Deed platform — compiled 2026-07-03_
   kubectl create namespace n4d-pre
   kubectl create secret generic postgres-secret -n n4d-pre ...
   kubectl create secret generic be-secret -n n4d-pre ...
+  kubectl create secret generic bootstrap-secret -n n4d-pre ...  # DB_* + NODE_ENV + RUN_MIGRATIONS
   ```
 
 ### 3c. Prod overlay (deploys to Infomaniak VPS)

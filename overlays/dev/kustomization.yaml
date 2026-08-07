@@ -5,3 +5,10 @@ resources:
   - namespace.yaml
   - ../../base
   - ingress.yaml
+components:
+  - ../../components/postgres
+# Bump after a bootstrap rebuild:
+#   docker buildx imagetools inspect ghcr.io/need4deed-org/bootstrap:latest
+images:
+  - name: ghcr.io/need4deed-org/bootstrap
+    digest: sha256:94286299edbe6ba65be0a046c72cc4995b21e5cccd0b9c5548c5895077e9ec89
