@@ -22,4 +22,4 @@ images:
   # once the org repo runs the workflow post-merge.
   - name: ghcr.io/need4deed-org/postgres
     newName: ghcr.io/theodore-evans/postgres
-    digest: sha256:a34b8dc266181dc748ef3b3c804892fda43dc794bd78a394e02a6f1e23227d92
+    digest: sha256:daf9e5521951cdd85d63e86068fd475fe28ccc827565f29d712359768f555a0e
