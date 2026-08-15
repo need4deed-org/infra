@@ -18,8 +18,20 @@ DNS_HINT_HOST=${DNS_HINT_HOST:-aits.need4deed.org}
 # with 644, any local user can read every cluster secret.
 K3S_KUBECONFIG_MODE=${K3S_KUBECONFIG_MODE:-644}
 
+# Set K3S_DATA_DIR to move all k3s state (containerd images, local-path
+# volumes, auto-deploy manifests) off the root disk, e.g. to a larger
+# data disk: K3S_DATA_DIR=/mnt/data/k3s. Empty keeps the k3s default
+# (/var/lib/rancher/k3s).
+K3S_DATA_DIR=${K3S_DATA_DIR:-}
+
 echo "=== 1/5  Installing k3s ==="
-curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE="$K3S_KUBECONFIG_MODE" sh -
+if [ -n "$K3S_DATA_DIR" ]; then
+  curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE="$K3S_KUBECONFIG_MODE" \
+    INSTALL_K3S_EXEC="server --data-dir $K3S_DATA_DIR" sh -
+else
+  curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE="$K3S_KUBECONFIG_MODE" sh -
+fi
+MANIFESTS_DIR="${K3S_DATA_DIR:-/var/lib/rancher/k3s}/server/manifests"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 echo "=== 2/5  Waiting for node to be Ready ==="
@@ -29,8 +41,9 @@ done
 echo ""
 
 echo "=== 3/5  Configuring Traefik for Let's Encrypt ==="
-# k3s watches /var/lib/rancher/k3s/server/manifests/ and applies changes automatically.
-sudo tee /var/lib/rancher/k3s/server/manifests/traefik-config.yaml > /dev/null <<EOF
+# k3s watches its server/manifests directory (relative to the data dir)
+# and applies changes automatically.
+sudo tee "$MANIFESTS_DIR/traefik-config.yaml" > /dev/null <<EOF
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
