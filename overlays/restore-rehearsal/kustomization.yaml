@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Scratch namespace for restore rehearsals (db-restore.md, "Restore into a
+# scratch namespace"). Postgres only: no base workloads, no ingress. Delete
+# the whole namespace when the rehearsal is done.
+namespace: n4d-restore
+resources:
+  - namespace.yaml
+components:
+  - ../../components/postgres
+  - ../../components/postgres-prod
+images:
+  # Same pins as overlays/prod; keep in step with it.
+  - name: ghcr.io/need4deed-org/postgres
+    newName: ghcr.io/theodore-evans/postgres
+    digest: sha256:daf9e5521951cdd85d63e86068fd475fe28ccc827565f29d712359768f555a0e
+patches:
+  # A restored instance promotes onto a new timeline; with archiving on it
+  # would push that timeline into the same stanza as production. The last
+  # -c wins, so appending turns archiving off without touching the list.
+  - target:
+      kind: StatefulSet
+      name: postgres
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: -c
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: archive_mode=off
+  # The nightly backup must never run from the scratch cluster: same stanza,
+  # same system id - it would interleave two histories in one repository.
+  - target:
+      kind: CronJob
+      name: pg-backup
+    patch: |-
+      - op: add
+        path: /spec/suspend
+        value: true
