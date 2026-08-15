@@ -11,7 +11,7 @@ data:
     repo1-type=s3
     repo1-path=/pgbackrest
     repo1-s3-bucket=n4d-prod-db-backups
-    repo1-s3-endpoint=s3.pub1.infomaniak.cloud
+    repo1-s3-endpoint=s3.pub2.infomaniak.cloud
     # The Infomaniak gateway addresses buckets by path only.
     repo1-s3-uri-style=path
     # Placeholder: the gateway ignores the region but the v4 signature needs
