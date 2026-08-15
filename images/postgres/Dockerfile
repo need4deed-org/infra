@@ -7,8 +7,12 @@ ARG PGBACKREST_VERSION=2.59.0-1.pgdg13+1
 
 # curl: postgres:17 ships neither curl nor wget, and the backup CronJob needs
 # one for the Slack alert and the dead man's switch ping.
+# ca-certificates: explicitly, because --no-install-recommends drops it (it is
+# only a recommends of curl) and without it every TLS peer - the S3 gateway
+# included - fails verification as self-signed.
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         "pgbackrest=${PGBACKREST_VERSION}" \
         curl \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
