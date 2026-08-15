@@ -33,9 +33,12 @@ jobs:
           context: images/postgres
           platforms: linux/amd64,linux/arm64
           push: true
+          # repository_owner so the same workflow publishes to whatever
+          # namespace runs it (org repo -> need4deed-org, a fork -> the fork
+          # owner). The overlay pins the digest either way.
           tags: |
-            ghcr.io/need4deed-org/postgres:17
-            ghcr.io/need4deed-org/postgres:17-pgbackrest-2.59.0
+            ghcr.io/${{ github.repository_owner }}/postgres:17
+            ghcr.io/${{ github.repository_owner }}/postgres:17-pgbackrest-2.59.0
 
       # The StatefulSet pins this digest. Copy it into
       # components/postgres/statefulset.yaml after the first publish.
