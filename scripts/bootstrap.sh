@@ -33,9 +33,13 @@ else
 fi
 MANIFESTS_DIR="${K3S_DATA_DIR:-/var/lib/rancher/k3s}/server/manifests"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+# With K3S_KUBECONFIG_MODE=600 the kubeconfig is root-only and every
+# kubectl here needs sudo; with 644 plain kubectl works.
+KUBECTL="kubectl"
+[ -r "$KUBECONFIG" ] || KUBECTL="sudo kubectl"
 
 echo "=== 2/5  Waiting for node to be Ready ==="
-until kubectl get nodes 2>/dev/null | grep -q " Ready"; do
+until $KUBECTL get nodes 2>/dev/null | grep -q " Ready"; do
   printf '.'; sleep 3
 done
 echo ""
@@ -77,11 +81,11 @@ echo "=== 5/5  Installing the SealedSecrets controller ==="
 # Applied from the repo, not dropped into the k3s auto-deploy directory: that
 # channel takes rendered manifests only, which would fork the pinned digest
 # away from cluster/sealed-secrets/.
-kubectl apply -k "$INFRA_DIR/cluster/sealed-secrets"
+$KUBECTL apply -k "$INFRA_DIR/cluster/sealed-secrets"
 # A slow image pull must not abort the script: the key-export instruction below
 # is the one message that has to be read.
-kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s \
-  || echo "controller not ready yet. Re-check: kubectl -n kube-system rollout status deploy/sealed-secrets-controller"
+$KUBECTL -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s \
+  || echo "controller not ready yet. Re-check: $KUBECTL -n kube-system rollout status deploy/sealed-secrets-controller"
 
 echo ""
 echo "=================================================================="
@@ -89,7 +93,7 @@ echo "Bootstrap complete."
 echo ""
 echo "DO THIS FIRST. Export the sealing key and put it in the team vault:"
 echo ""
-echo "  ( umask 077; kubectl get secret -n kube-system \\"
+echo "  ( umask 077; $KUBECTL get secret -n kube-system \\"
 echo "      -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml \\"
 echo "      > ~/<cluster>-sealing-key.yaml )"
 echo ""
