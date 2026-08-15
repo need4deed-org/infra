@@ -81,6 +81,10 @@ cmd_fetch_cert() {
 }
 
 cmd_seal() {
+  # Sealing is fully offline: kubectl runs --dry-run=client and kubeseal
+  # encrypts against the committed cert. Detach from any kubeconfig so a
+  # root-only /etc/rancher/k3s/k3s.yaml does not fail the client-side render.
+  export KUBECONFIG=/dev/null
   [ $# -ge 3 ] || usage
   local cluster=$1 namespace=$2 name=$3
   shift 3
