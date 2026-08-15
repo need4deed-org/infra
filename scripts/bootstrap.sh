@@ -3,17 +3,23 @@
 # Run as a sudoer: bash bootstrap.sh
 set -euo pipefail
 
-NAMESPACE=n4d-dev
-ACME_EMAIL=dev@need4deed.org
-INFRA_REPO=https://github.com/need4deed-org/infra.git
-INFRA_DIR=/opt/infra
+# Defaults are AITS/dev-shaped; override via environment for prod, e.g.
+#   ACME_EMAIL=admin@need4deed.org INFRA_BRANCH=prod-provisioning \
+#   K3S_KUBECONFIG_MODE=600 bash bootstrap.sh
+NAMESPACE=${NAMESPACE:-n4d-dev}
+ACME_EMAIL=${ACME_EMAIL:-dev@need4deed.org}
+INFRA_REPO=${INFRA_REPO:-https://github.com/need4deed-org/infra.git}
+INFRA_BRANCH=${INFRA_BRANCH:-main}
+INFRA_DIR=${INFRA_DIR:-/opt/infra}
+DNS_HINT_HOST=${DNS_HINT_HOST:-aits.need4deed.org}
 
-# Allow non-root users to call kubectl without sudo.
-# k3s writes its kubeconfig as root-only by default; this makes it world-readable.
-K3S_KUBECONFIG_MODE=644
+# 644 lets non-root users call kubectl without sudo; k3s defaults to
+# root-only (600). Prod should decide deliberately (sealing-keys.md §7):
+# with 644, any local user can read every cluster secret.
+K3S_KUBECONFIG_MODE=${K3S_KUBECONFIG_MODE:-644}
 
 echo "=== 1/5  Installing k3s ==="
-curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE=644 sh -
+curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE="$K3S_KUBECONFIG_MODE" sh -
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 echo "=== 2/5  Waiting for node to be Ready ==="
@@ -46,9 +52,11 @@ echo "=== 4/5  Cloning infra repo ==="
 # on an existing clone.
 if [ -d "$INFRA_DIR/.git" ]; then
   sudo chown -R "$USER:$USER" "$INFRA_DIR"
-  git -C "$INFRA_DIR" pull
+  git -C "$INFRA_DIR" fetch origin "$INFRA_BRANCH"
+  git -C "$INFRA_DIR" checkout "$INFRA_BRANCH"
+  git -C "$INFRA_DIR" pull origin "$INFRA_BRANCH"
 else
-  sudo git clone "$INFRA_REPO" "$INFRA_DIR"
+  sudo git clone -b "$INFRA_BRANCH" "$INFRA_REPO" "$INFRA_DIR"
   sudo chown -R "$USER:$USER" "$INFRA_DIR"
 fi
 
@@ -99,5 +107,5 @@ echo "  BREVO_API_KEY        — Brevo API key"
 echo "  SLACK_OPS_WEBHOOK_URL"
 echo "  SLACK_COMMENTS_WEBHOOK_URL"
 echo ""
-echo "DNS: add an A record  aits.need4deed.org → $(curl -sf ifconfig.me || hostname -I | awk '{print $1}')"
+echo "DNS: add an A record  ${DNS_HINT_HOST} → $(curl -sf ifconfig.me || hostname -I | awk '{print $1}')"
 echo "=================================================================="
