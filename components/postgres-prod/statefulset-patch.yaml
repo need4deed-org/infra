@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          # Stated in full because a strategic merge replaces this list rather
+          # than appending to it: a second component patching args would
+          # silently drop everything here.
+          args:
+            - postgres
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/etc/postgres-tls/tls.crt
+            - -c
+            - ssl_key_file=/etc/postgres-tls/tls.key
+            # Dev keeps the entrypoint-generated file; prod supplies its own so
+            # the plaintext `host` line never exists.
+            - -c
+            - hba_file=/etc/postgres-hba/pg_hba.conf
+            - -c
+            - wal_level=replica
+            - -c
+            - archive_mode=on
+            - -c
+            - archive_command=pgbackrest --stanza=n4d archive-push %p
+            # A low-write database may not fill a 16MB segment for hours, which
+            # would make the real RPO the write rate. This bounds it at 5min.
+            - -c
+            - archive_timeout=300
+            # Sized for the 4 vCPU / 12GB pack shared with be, fe, cdn-proxy,
+            # Traefik and k3s. max_connections stays low so that
+            # work_mem * max_connections cannot reach the memory limit.
+            - -c
+            - max_connections=50
+            - -c
+            - shared_buffers=512MB
+            - -c
+            - effective_cache_size=1536MB
+            - -c
+            - work_mem=8MB
+            - -c
+            - maintenance_work_mem=128MB
+            - -c
+            - huge_pages=off
+            - -c
+            - log_min_duration_statement=1000
+          # Restated in full: envFrom has no merge key, so a patch replaces it.
+          # archive-push runs in this container and needs the repo credentials
+          # and the cipher passphrase.
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+            - secretRef:
+                name: pgbackrest-secret
+          # Both arrive through envFrom already. Named again as required keys so
+          # that a missing one stops the pod: 10-roles.sh runs after initdb has
+          # written PG_VERSION, so failing there leaves a cluster that never
+          # runs the init directory again and has neither role, while staying
+          # Ready. The only symptom would be the nightly backup failing to
+          # authenticate.
+          env:
+            - name: N4D_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: N4D_APP_PASSWORD
+            - name: PG_BACKUP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pgbackrest-secret
+                  key: PG_BACKUP_PASSWORD
+          volumeMounts:
+            - name: postgres-tls
+              mountPath: /etc/postgres-tls
+              readOnly: true
+            - name: pg-hba
+              mountPath: /etc/postgres-hba
+              readOnly: true
+            - name: pgbackrest-config
+              mountPath: /etc/pgbackrest
+              readOnly: true
+            - name: init-roles
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+      volumes:
+        - name: postgres-tls
+          secret:
+            secretName: postgres-tls
+            # 0640 as octal. Owner root, group fsGroup, nothing for other: the
+            # only shape PostgreSQL's key permission check accepts besides 0600.
+            defaultMode: 0640
+        - name: pg-hba
+          configMap:
+            name: postgres-pg-hba
+        - name: pgbackrest-config
+          configMap:
+            name: pgbackrest-config
+        - name: init-roles
+          configMap:
+            name: postgres-init-roles
+  # volumeClaimTemplates are immutable and local-path cannot expand, so prod is
+  # created at its final size. Restated in full: the list has no merge key.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi

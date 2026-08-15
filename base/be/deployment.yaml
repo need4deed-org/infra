@@ -14,6 +14,17 @@ spec:
     spec:
       imagePullSecrets:
         - name: ghcr-secret
+      volumes:
+        # optional: dev has no postgres-ca secret, and NODE_ENV=development
+        # makes the BE connect without TLS and never read the path. Where the
+        # secret is absent the subPath leaves an empty directory behind, so a
+        # prod pod that lost its CA fails at import instead of falling back to
+        # the public root store. subPath mounts do not track secret updates:
+        # rotating the CA needs a be restart.
+        - name: postgres-ca
+          secret:
+            secretName: postgres-ca
+            optional: true
       initContainers:
         - name: bootstrap
           # Digest, not a tag: this image runs next to database credentials and
@@ -23,6 +34,19 @@ spec:
           envFrom:
             - secretRef:
                 name: bootstrap-secret
+          # A path, not a secret: the BE otherwise defaults to the AWS RDS
+          # bundle still baked into the image, which cannot verify this server.
+          env:
+            - name: DB_SSL_CA_PATH
+              value: /app/certificates/postgres-ca.crt
+          # The init container imports the same data-source.ts and its image
+          # copies no ca/ directory: without this mount the pod never leaves
+          # init under NODE_ENV=production.
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /app/certificates/postgres-ca.crt
+              subPath: ca.crt
+              readOnly: true
       containers:
         - name: be
           image: ghcr.io/need4deed-org/be:develop
@@ -32,6 +56,14 @@ spec:
           envFrom:
             - secretRef:
                 name: be-secret
+          env:
+            - name: DB_SSL_CA_PATH
+              value: /app/certificates/postgres-ca.crt
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /app/certificates/postgres-ca.crt
+              subPath: ca.crt
+              readOnly: true
           resources:
             requests:
               cpu: 250m

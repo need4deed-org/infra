@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbackrest-config
+data:
+  # Non-secret options only. repo1-s3-key, repo1-s3-key-secret and
+  # repo1-cipher-pass arrive as PGBACKREST_* env vars from pgbackrest-secret,
+  # so credentials stay out of both this file and argv.
+  pgbackrest.conf: |
+    [global]
+    repo1-type=s3
+    repo1-path=/pgbackrest
+    repo1-s3-bucket=n4d-prod-db-backups
+    repo1-s3-endpoint=s3.pub1.infomaniak.cloud
+    # The Infomaniak gateway addresses buckets by path only.
+    repo1-s3-uri-style=path
+    # Placeholder: the gateway ignores the region but the v4 signature needs
+    # one. Confirm against the real bucket at first backup.
+    repo1-s3-region=us-east-1
+    # One project-scoped credential can read every bucket, so the repo is
+    # encrypted before it leaves the cluster.
+    repo1-cipher-type=aes-256-cbc
+    # The gateway has no lifecycle rules, so retention is the tool's job.
+    # repo1-retention-archive is deliberately unset: with a time-based full
+    # retention pgBackRest expires WAL with the backup it belongs to, which is
+    # the part hand-rolled retention gets wrong.
+    repo1-retention-full-type=time
+    repo1-retention-full=30
+    compress-type=zst
+    # /tmp is an emptyDir; the root filesystem is read-only.
+    log-path=/tmp/pgbackrest
+    log-level-file=info
+    log-level-console=info
+
+    [n4d]
+    pg1-path=/var/lib/postgresql/data/pgdata
+    pg1-database=n4d
+    pg1-user=pgbackrest
+    # pg1-socket-path is deliberately absent. The backup CronJob is a separate
+    # pod and cannot reach the postmaster's socket; leaving the socket path
+    # unset makes pgBackRest omit `host` from the conninfo, so libpq falls back
+    # to PGHOST and connects over TLS. Setting it here would break the CronJob.

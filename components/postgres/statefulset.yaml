@@ -13,17 +13,79 @@ spec:
       labels:
         app: postgres
     spec:
+      automountServiceAccountToken: false
+      # STOPSIGNAL is SIGINT, a fast shutdown: this is flush headroom, not a wait.
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # PGDATA moved into a subdirectory of the volume and postgres does not
+        # migrate a cluster that is at the root: it would initdb into the empty
+        # subdirectory and orphan the old files. overlays/dev is applied
+        # unattended, so refuse to start rather than lose the database quietly.
+        - name: assert-pgdata-layout
+          image: postgres:17
+          command: [sh, -c]
+          args:
+            - |
+              test ! -f /var/lib/postgresql/data/PG_VERSION && exit 0
+              echo "cluster at the volume root: see docs/runbooks/db-restore.md, Applying this to an existing volume" >&2
+              exit 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
       containers:
         - name: postgres
+          # components/postgres-prod swaps this for the pgBackRest image it pins
+          # by digest: archive_command runs inside this container, so pgBackRest
+          # has to be in the image wherever archiving is on.
           image: postgres:17
           ports:
             - containerPort: 5432
           envFrom:
             - secretRef:
                 name: postgres-secret
+          env:
+            # A subdirectory, not the volume root: the entrypoint only chowns
+            # PGDATA when it runs as root, so as uid 999 only a directory it
+            # creates itself can be chmodded to the 0700 postgres demands.
+            # An existing volume is not migrated by this: see
+            # docs/runbooks/db-restore.md, "Applying this to an existing volume".
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_INITDB_ARGS
+              value: --data-checksums
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: tmp
+              mountPath: /tmp
+            - name: run
+              mountPath: /var/run/postgresql
           resources:
             requests:
               cpu: 250m
@@ -31,11 +93,27 @@ spec:
             limits:
               cpu: 500m
               memory: 1Gi
+          # Five minutes of crash recovery must not become a kill loop.
+          startupProbe:
+            exec:
+              command: [pg_isready, -U, postgres]
+            periodSeconds: 10
+            failureThreshold: 30
           readinessProbe:
             exec:
               command: [pg_isready, -U, postgres]
             initialDelaySeconds: 5
             periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, postgres]
+            periodSeconds: 10
+            failureThreshold: 6
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data
