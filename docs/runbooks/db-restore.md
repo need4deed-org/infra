@@ -233,6 +233,18 @@ with 1511 files:
 These scale with database size and with the link to Infomaniak. Re-measure after
 the first real backup; the RPO bound does not change, because it is a timer.
 
+From the prod cluster rehearsal on 2026-08-15 against Infomaniak Object Storage
+(s3.pub2, dc4-a), on a 29.5MB database with 1267 files:
+
+| | |
+| --- | --- |
+| Full backup (via CronJob path) | 2m41s wall for the job; the backup itself dominated by first-time S3 round-trips |
+| Incremental backup | 8.7s, 159.5KB in the repository |
+| `pgbackrest restore --delta` | 8.5s |
+
+Numbers move again when the RDS data lands; re-measure then per phase 4 of the
+cutover runbook.
+
 ## Retention
 
 `repo1-retention-full-type=time` with `repo1-retention-full=30` keeps 30 days.
