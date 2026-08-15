@@ -16,3 +16,10 @@ components:
 images:
   - name: ghcr.io/need4deed-org/bootstrap
     digest: sha256:94286299edbe6ba65be0a046c72cc4995b21e5cccd0b9c5548c5895077e9ec89
+  # Built from images/postgres by build-postgres-image.yaml running in the
+  # theodore-evans fork (the branch is not upstream yet, so the org namespace
+  # has no image). Re-point to ghcr.io/need4deed-org/postgres and its digest
+  # once the org repo runs the workflow post-merge.
+  - name: ghcr.io/need4deed-org/postgres
+    newName: ghcr.io/theodore-evans/postgres
+    digest: sha256:a34b8dc266181dc748ef3b3c804892fda43dc794bd78a394e02a6f1e23227d92
