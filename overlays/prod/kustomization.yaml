@@ -13,13 +13,14 @@ components:
   - ../../components/postgres-prod
 images:
   # Built from the theodore-evans/be fork (branch build-bootstrap-fork, synced
-  # to upstream develop 2026-08-16) because the org image is stale: its
-  # 2026-07-13 build predates DB_SSL_CA_PATH (be#823) and the onetimer
-  # sequence fix (be#866). Re-point to ghcr.io/need4deed-org/bootstrap once
-  # the org rebuilds it.
+  # to upstream develop 2026-08-17 incl. be#876's add-api-key migration - the
+  # be:develop image and this bootstrap must agree on the migration set)
+  # because the org image is stale: its 2026-07-13 build predates
+  # DB_SSL_CA_PATH (be#823) and the onetimer sequence fix (be#866).
+  # Re-point to ghcr.io/need4deed-org/bootstrap once the org rebuilds it.
   - name: ghcr.io/need4deed-org/bootstrap
     newName: ghcr.io/theodore-evans/bootstrap
-    digest: sha256:14104e950fa15436355f2723f25b59df3d33fba0ad73b2d1202c8a50fab1426e
+    digest: sha256:b8e483df55d33ae327543bf633a95378a4bc5a0e7bf185d825834001effa8f3f
   # Built by build-fe.yaml in the theodore-evans/fe fork (upstream has no fe
   # image workflow). Bakes API_URL=http://be:8000 (the fe server proxies
   # /api/* in-cluster; the browser stays same-origin) and cdn.need4deed.org
