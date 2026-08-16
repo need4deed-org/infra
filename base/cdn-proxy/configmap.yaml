@@ -59,7 +59,8 @@ data:
   # Shared by every location block so the TLS settings cannot drift apart.
   cdn-origin.conf: |
     set $cdn_origin "s3.pub2.infomaniak.cloud";
-    proxy_pass https://$cdn_origin/object/v1/AUTH_PROJECT_ID/n4d-cdn$uri;
+    # AUTH_<keystone project id> - the Infomaniak Public Cloud project.
+    proxy_pass https://$cdn_origin/object/v1/AUTH_6b6ada223b5744428d6c7b70d31bd593/n4d-cdn$uri;
 
     # Each of these fails silently against the shared Swift endpoint if
     # omitted: nginx sends no SNI upstream by default and does not verify.
