@@ -1,0 +1,22 @@
+# Same policy as base/network-policies/allow-ingress.yaml. The postgres
+# component's allow-backup-to-postgres policy makes the postgres pod
+# ingress-default-deny, and the scratch namespace does not include the
+# base's policy set - without this, be's connections are rejected.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-be-to-postgres
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: be
+      ports:
+        - protocol: TCP
+          port: 5432

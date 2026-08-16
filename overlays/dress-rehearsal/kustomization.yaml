@@ -14,6 +14,7 @@ namespace: n4d-restore
 resources:
   - ../restore-rehearsal
   - ../../base/be
+  - allow-be-to-postgres.yaml
 images:
   # Same pins as overlays/prod; keep in step with it.
   - name: ghcr.io/need4deed-org/bootstrap
