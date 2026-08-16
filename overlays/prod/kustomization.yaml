@@ -1,4 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
+replicas:
+  - name: be
+    count: 0
+#   change this to 1 after the dump restore
 kind: Kustomization
 namespace: n4d-prod
 resources:
@@ -15,7 +19,8 @@ components:
 #   docker buildx imagetools inspect ghcr.io/need4deed-org/bootstrap:latest
 images:
   - name: ghcr.io/need4deed-org/bootstrap
-    digest: sha256:94286299edbe6ba65be0a046c72cc4995b21e5cccd0b9c5548c5895077e9ec89
+    newName: ghcr.io/theodore-evans/bootstrap
+    digest: sha256:14104e950fa15436355f2723f59df3d33fba0ad73b2d1202c8a50fab1426e
   # Built from images/postgres by build-postgres-image.yaml running in the
   # theodore-evans fork (the branch is not upstream yet, so the org namespace
   # has no image). Re-point to ghcr.io/need4deed-org/postgres and its digest
