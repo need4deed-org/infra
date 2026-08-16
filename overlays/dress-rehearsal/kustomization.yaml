@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Adds the be Deployment on top of the restore-rehearsal scratch cluster, to
+# rehearse cutover's riskiest step: be's first start against dump-restored
+# data (migrations catch up, seeding must SKIP because users exist).
+#
+# Order matters: apply overlays/restore-rehearsal first, restore the dump
+# into it, and only then apply this overlay. If be starts against an empty
+# database, the bootstrap seeds fixture users (see overlays/prod).
+#
+# Needs the same copied Secrets as restore-rehearsal plus be-secret,
+# bootstrap-secret and ghcr-secret.
+namespace: n4d-restore
+resources:
+  - ../restore-rehearsal
+  - ../../base/be
+images:
+  # Same pins as overlays/prod; keep in step with it.
+  - name: ghcr.io/need4deed-org/bootstrap
+    newName: ghcr.io/theodore-evans/bootstrap
+    digest: sha256:14104e950fa15436355f2723f25b59df3d33fba0ad73b2d1202c8a50fab1426e
+  - name: ghcr.io/need4deed-org/postgres
+    newName: ghcr.io/theodore-evans/postgres
+    digest: sha256:daf9e5521951cdd85d63e86068fd475fe28ccc827565f29d712359768f555a0e
