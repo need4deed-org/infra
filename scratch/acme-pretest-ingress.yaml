@@ -1,6 +1,6 @@
 # TEMPORARY - cutover-eve ACME pre-test (2026-08-17). Proves the
 # Traefik -> Let's Encrypt issuance path on a throwaway hostname
-# (vps.need4deed.org, A record added for the test) before the real
+# (staging.need4deed.org, A record added for the test) before the real
 # app/cdn hosts need certificates on cutover day.
 #
 # Apply with kubectl (not part of any overlay); delete the Ingress and
@@ -15,7 +15,7 @@ metadata:
     traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
 spec:
   rules:
-    - host: vps.need4deed.org
+    - host: staging.need4deed.org
       http:
         paths:
           - path: /
@@ -27,4 +27,4 @@ spec:
                   number: 3000
   tls:
     - hosts:
-        - vps.need4deed.org
+        - staging.need4deed.org
