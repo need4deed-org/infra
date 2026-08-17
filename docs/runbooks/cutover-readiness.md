@@ -1,8 +1,7 @@
-# Cutover readiness - evidence, 17 Aug 2026
+# Cutover readiness, 17 Aug 2026
 
-Every step of tomorrow's sequence, against what has already been executed.
+Every step of the cutover sequence, against what has already been executed.
 "Executed" means run for real against this VPS and/or live AWS, output
-verified, this week.
 
 | # | Cutover step | Status | Evidence |
 |---|---|---|---|
@@ -21,25 +20,21 @@ verified, this week.
 | 11 | Post-cutover backup | executed routinely | full 2m41s + incr 8.7s through the CronJob path; nightly armed 02:00 UTC |
 
 Failures already found and fixed by rehearsal (the system works):
-truncated bootstrap digest, sed-corrupted DB_PASSWORD, missing scratch
-NetworkPolicy, cdn-proxy placeholder project id, private cdn container,
-stale bootstrap image missing two upstream fixes.
+- truncated bootstrap digest, sed-corrupted DB_PASSWORD, missing scratch
+- NetworkPolicy, cdn-proxy placeholder project id, private cdn container,
+- stale bootstrap image missing two upstream fixes.
 
 ## Rollback
 
-Trigger: anything unresolvable during the window or soak.
+in case of anything unresolvable during the window or soak.
 
 1. Namecheap `app`: back to `CNAME prod-need4deed-lb-2117978489.eu-central-1.elb.amazonaws.com` (TTL 1 min, propagation ~1 min); delete `cdn`.
 2. `aws ecs update-service --cluster prod-need4deed-cluster --service prod-need4deed-n4d-service --desired-count 1` - permission proven by tonight's no-op.
 3. RDS was never written to and never stopped; the pre-flip snapshot exists as a second anchor.
 
-Cost of rollback: writes made on the VPS after the flip are lost. Decide
-early. The rollback path needs nothing that was not already proven tonight:
-one DNS edit + one API call already exercised.
+Cost of rollback: **writes made on the VPS after the flip are lost**.
 
-## Honestly untested until the day
+## untested until the day
 
-- Logged-in flows (login, matching) - first smoke after the flip, with an
-  existing prod account
-- Real email delivery (the 17 Aug staging session ran with notification
-  dry-run flags on, deliberately)
+- Logged-in flows (login, matching) - first smoke after the flip, with an   existing prod account
+- Real email delivery (the 17 Aug staging session ran with notification dry-run flags on, deliberately)
