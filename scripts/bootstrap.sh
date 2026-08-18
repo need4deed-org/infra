@@ -59,6 +59,13 @@ spec:
       - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      # Ingress routers bind to websecure only (router.tls); without this,
+      # port 80 has no routers and Traefik answers 404 instead of
+      # redirecting to HTTPS (the job the AWS ALB listener used to do).
+      # :443 and not "websecure": naming the entrypoint copies its
+      # in-pod port (8443) into the Location header.
+      - "--entrypoints.web.http.redirections.entrypoint.to=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
     persistence:
       enabled: true
       size: 128Mi
