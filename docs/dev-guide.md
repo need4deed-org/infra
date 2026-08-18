@@ -56,30 +56,39 @@ about it later; there is no staging buffer in front of this database.
 
 The moving parts: images are built by GitHub Actions and published to
 GHCR; the cluster runs whatever `overlays/prod/kustomization.yaml` pins.
-The be image is deployed by tag (`be:develop`, `imagePullPolicy: Always`),
-the fe and bootstrap images by digest.
+Every image is pinned by digest, so merging and building alone changes
+nothing in production - a deploy is always an edit to the pin, and pod
+restarts are no-ops. "What is production running" is answered by that
+one file.
 
 ### be
 
 Merging to `develop` in the `be` repo publishes a new `be:develop` image.
-The cluster picks it up on the next be pod restart:
+To deploy it:
 
-```
-k rollout restart deploy be
-```
+1. Get the digest of the build you want:
+   `docker buildx imagetools inspect ghcr.io/need4deed-org/be:develop`
+   (or from the workflow run's logs)
+2. Update the `be` digest in `overlays/prod/kustomization.yaml`
+3. Apply (below)
 
 Two things happen on be startup that you should know about:
 
 1. The bootstrap init container and the be itself run pending database
-   migrations (with `NODE_ENV=production` this is unconditional). A merge
-   with a migration goes live on the next restart.
+   migrations (with `NODE_ENV=production` this is unconditional). A bump
+   to an image containing a migration migrates the production schema the
+   moment it starts.
 2. Seeding runs but skips every table that already has rows. On the
    production database this is a no-op; it only matters on empty databases.
 
 If your be change adds a migration, also rebuild the bootstrap image
 (`build-bootstrap` workflow in the be repo) and update its digest pin in
-`overlays/prod/kustomization.yaml` so the two images agree on the
-migration set.
+the same commit, so the two images agree on the migration set.
+
+Rollback is `git revert` of the pin commit, then apply. An image revert
+does not revert a migration the image already ran: rolling back past a
+schema change needs that change to be backward-compatible, or undone by
+hand.
 
 ### fe
 
