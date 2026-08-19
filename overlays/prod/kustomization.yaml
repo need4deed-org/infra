@@ -33,7 +33,7 @@ images:
     digest: sha256:32f72ad53b59f99a620567f53f91bdfa33392116784f1d47b838e2406b42ecac
   - name: ghcr.io/need4deed-org/fe
     #newName: ghcr.io/theodore-evans/fe
-    digest: sha256:bf87828b664596e2d481f2d1f0bce2c7897f007d184b21b802fc0e113f12e0ac
+    digest: sha256:e510c3f1e34eaf958f3f2557d430ce697a15ffd24df27aa8d7da45a16d104cc6
   - name: ghcr.io/need4deed-org/postgres
     newName: ghcr.io/theodore-evans/postgres
     digest: sha256:daf9e5521951cdd85d63e86068fd475fe28ccc827565f29d712359768f555a0e
