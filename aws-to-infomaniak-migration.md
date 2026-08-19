@@ -107,7 +107,27 @@ _Need4Deed platform — compiled 2026-07-03_
 
 ### 3f. Secrets management
 
-Secrets are created manually with `kubectl create secret`. Document all commands in bootstrap scripts. Later: consider Sealed Secrets to store encrypted secrets in the repo.
+Today every secret lives in the GitHub org and reaches the cluster as `kubectl create secret --from-literal` inside `deploy.yaml`. One org compromise yields the DB password, the JWT secret, both SMTP passwords, the Brevo key, both Slack webhooks and the GHCR PAT.
+
+**Mechanism: SealedSecrets.** The controller (`cluster/sealed-secrets/`, installed per cluster by the bootstrap script) generates an RSA keypair that never leaves the cluster. `scripts/seal-secret.sh` encrypts a value against that cluster's public cert; the ciphertext is committed under `secrets/<cluster>/<namespace>/<name>.yaml` and only that cluster can open it. Git and CI carry ciphertext only. Full procedures in [`docs/runbooks/sealing-keys.md`](docs/runbooks/sealing-keys.md).
+
+Sealing starts at `n4d-pre` and prod. A blob sealed against AITS cannot be decrypted on a local k3d cluster, and `overlays/dev` is applied to both, so it has to stay portable: the Secrets it consumes cannot come from `secrets/`.
+
+That scopes the payoff. What CI writes into `n4d-dev` on AITS today is not dummy data. It is the live `mail.infomaniak.com` passwords for dev@ and coordinators@, the Brevo key and both Slack webhooks, and those stay in the GitHub org until `overlays/dev` is split into a portable local overlay and an AITS one that can include sealed blobs.
+
+**Cutover, per cluster, in this order.** For `n4d-pre` on AITS and for prod. `n4d-dev` waits on that overlay split. AITS carries both `n4d-dev` and `n4d-pre` under one key; prod is a second key.
+
+- [ ] Install the controller: `kubectl apply -k cluster/sealed-secrets` (bootstrap does this on a fresh VPS).
+- [ ] **Export the sealing key and put it in the team vault.** Not in git, not in the GitHub org. Lose it and every committed blob for that cluster is unrecoverable.
+- [ ] Verify the export offline with `kubeseal --recovery-unseal`, before trusting it.
+- [ ] Fetch the cluster's cert: `scripts/seal-secret.sh fetch-cert <cluster> --context <ctx>`, commit it.
+- [ ] Seal each of the five Secrets (`postgres-secret`, `be-secret`, `fe-secret`, `ghcr-secret`, and the `age` key once backups land) from a plaintext file kept outside the repo. Commit under `secrets/<cluster>/<namespace>/`.
+- [ ] Include that directory from the overlay that deploys to the cluster.
+- [ ] **Annotate the existing Secret `sealedsecrets.bitnami.com/managed=true` before applying.** The controller refuses to take over a Secret it does not own, and it refuses quietly: `kubectl apply` exits 0, the SealedSecret is created, and the old CI value stays live. Check `.status.conditions`, not the apply output.
+- [ ] Only after a verified takeover: delete that `kubectl create secret` block from `.github/workflows/deploy.yaml`.
+- [ ] Only after that: delete the GitHub Actions secret from the org. This step is the point of the exercise.
+
+Not covered by this: encryption at rest. On single-node k3s the unsealed Secrets and the private key sit in cleartext in kine on the node disk, so a stolen VPS snapshot still yields everything. Full-disk encryption is the control, and it is a decision to make before prod carries real data.
 
 ---
 

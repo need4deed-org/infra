@@ -1,0 +1,57 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fe
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+spec:
+  rules:
+    # The application lives at app.need4deed.org (the AWS prod CNAME that
+    # flips to this VPS at cutover). The apex and www belong to the static
+    # website (CloudFront/Amplify) and migrate separately - listing them
+    # here before their DNS moves would only generate failing ACME
+    # challenges against Let's Encrypt's rate limits.
+    #
+    # There is no be ingress: the browser talks same-origin to the fe, whose
+    # server proxies /api/* to the be service in-cluster (API_URL baked into
+    # the fe image). Add a be host only if a public API is ever needed.
+    - host: app.need4deed.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fe
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - app.need4deed.org
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cdn
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+spec:
+  rules:
+    # CDN_BASE_URL points here; the backend fetches email templates through
+    # it, so the name must resolve before that path is exercised. The fe
+    # image also bakes cdn.need4deed.org as its asset host.
+    - host: cdn.need4deed.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cdn-proxy
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - cdn.need4deed.org

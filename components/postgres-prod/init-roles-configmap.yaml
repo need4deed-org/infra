@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-roles
+data:
+  # Runs once, at initdb. A .sh rather than a .sql because the passwords come
+  # from the environment and .sql cannot read it. ConfigMap files are not
+  # executable, so the entrypoint sources this: it must not change shell
+  # options, and PGPASSWORD is already exported by the caller.
+  # \getenv leaves the variable undefined when the env var is missing, which
+  # makes psql fail on the substitution rather than create a passwordless role.
+  10-roles.sh: |
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'SQL'
+    \getenv dbname POSTGRES_DB
+    \getenv app_password N4D_APP_PASSWORD
+    \getenv backup_password PG_BACKUP_PASSWORD
+
+    CREATE ROLE n4d_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+      PASSWORD :'app_password';
+    GRANT CONNECT ON DATABASE :"dbname" TO n4d_app;
+    GRANT USAGE, CREATE ON SCHEMA public TO n4d_app;
+
+    CREATE ROLE pgbackrest LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+      PASSWORD :'backup_password';
+    GRANT CONNECT ON DATABASE :"dbname" TO pgbackrest;
+    GRANT pg_read_all_settings TO pgbackrest;
+    GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_start(text, boolean) TO pgbackrest;
+    GRANT EXECUTE ON FUNCTION pg_catalog.pg_backup_stop(boolean) TO pgbackrest;
+    GRANT EXECUTE ON FUNCTION pg_catalog.pg_switch_wal() TO pgbackrest;
+    GRANT EXECUTE ON FUNCTION pg_catalog.pg_create_restore_point(text) TO pgbackrest;
+    SQL

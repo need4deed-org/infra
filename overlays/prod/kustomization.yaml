@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: n4d-prod
+resources:
+  - namespace.yaml
+  - ../../base
+  - ingress.yaml
+components:
+  # Both are needed: postgres-prod patches the StatefulSet that
+  # components/postgres provides. A managed-database provider branch
+  # omits both instead.
+  - ../../components/postgres
+  - ../../components/postgres-prod
+
+# Every image is pinned by digest. Production changes only when a digest
+# below changes: edit the pin, `kubectl diff -k`, apply. Rollback is
+# reverting the pin commit and applying again - but note that reverting an
+# image does not revert a migration it has already run; rolling back past
+# a schema change needs that change to be backward-compatible.
+images:
+  # be and bootstrap are built from the same repo and must agree on the
+  # migration set: when a be bump includes a new migration, rebuild the
+  # bootstrap image (build-bootstrap workflow in the be repo) and bump
+  # both digests together.
+  - name: ghcr.io/need4deed-org/be
+    digest: sha256:ae044f92750c65cd0553bdf885b2ec31bc684c6aa2fd030dd463f5b933bf2e48
+  # bootstrap, fe and postgres currently point at theodore-evans/* builds:
+  # the org has no usable image (bootstrap's org build predates fixes the
+  # be depends on; fe and postgres have no org workflow runs yet). Once the
+  # org repos run the workflows, drop each newName and take the org digest.
+  - name: ghcr.io/need4deed-org/bootstrap
+    newName: ghcr.io/theodore-evans/bootstrap
+    digest: sha256:b8e483df55d33ae327543bf633a95378a4bc5a0e7bf185d825834001effa8f3f
+  - name: ghcr.io/need4deed-org/fe
+    newName: ghcr.io/theodore-evans/fe
+    digest: sha256:ea0f03a41ba9d7ed93e8fe17bc18d564da1fc177af93df050378ac5e4002933c
+  - name: ghcr.io/need4deed-org/postgres
+    newName: ghcr.io/theodore-evans/postgres
+    digest: sha256:daf9e5521951cdd85d63e86068fd475fe28ccc827565f29d712359768f555a0e
+
+# On a fresh provision, keep be at 0 until real data is restored: with
+# NODE_ENV=production the bootstrap migrates and seeds unconditionally,
+# and seeding an empty database creates fixture users. Production data
+# was restored 2026-08-17; 1 is the running state.
+replicas:
+  - name: be
+    count: 1
