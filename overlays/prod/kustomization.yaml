@@ -44,4 +44,4 @@ images:
 # was restored 2026-08-17; 1 is the running state.
 replicas:
   - name: be
-    count: 0
+    count: 1
