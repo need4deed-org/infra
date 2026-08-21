@@ -12,6 +12,10 @@ spec:
       labels:
         app: be
     spec:
+      # The be never talks to the Kubernetes API; without this the pod
+      # carries a token that can reach the sealed-secrets controller
+      # proxy (bound to system:authenticated by the upstream manifest).
+      automountServiceAccountToken: false
       imagePullSecrets:
         - name: ghcr-secret
       volumes:

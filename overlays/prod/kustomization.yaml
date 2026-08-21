@@ -5,6 +5,10 @@ resources:
   - namespace.yaml
   - ../../base
   - ingress.yaml
+  # Sealed blobs ride the same diff/apply loop as everything else. They
+  # need the SealedSecret CRD, which bootstrap.sh installs before the
+  # first overlay apply.
+  - ../../secrets/prod/n4d-prod
 components:
   # Both are needed: postgres-prod patches the StatefulSet that
   # components/postgres provides. A managed-database provider branch

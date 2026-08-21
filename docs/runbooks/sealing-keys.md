@@ -102,7 +102,8 @@ kubectl apply -f ~/<cluster>-sealing-key.yaml
 kubectl apply -k cluster/sealed-secrets
 kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
 
-# 3. only now apply the overlay
+# 3. only now apply the overlay. It includes secrets/<cluster>/<ns>/, so
+#    this step also restores every sealed blob; nothing extra to apply.
 kubectl apply -k overlays/<env>
 ```
 

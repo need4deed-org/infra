@@ -133,11 +133,11 @@ Secrets are SealedSecrets: encrypted blobs in `secrets/prod/n4d-prod/`,
 decryptable only by the cluster. To add or change one, follow
 `secrets/README.md` and `docs/runbooks/sealing-keys.md` - the short
 version is `scripts/seal-secret.sh` with a plaintext env file that lives
-outside the repo, then commit the sealed blob, then:
-
-```
-kk apply -f /opt/infra/secrets/prod/n4d-prod/
-```
+outside the repo, then commit the sealed blob and add it to
+`secrets/prod/n4d-prod/kustomization.yaml`. The prod overlay includes
+that directory, so the blob deploys through the normal loop above
+(`kk diff -k /opt/infra/overlays/prod`, then apply) - a committed
+rotation shows up in the diff like any other change.
 
 The success signal is `Synced=True` on the SealedSecret (a bad blob fails
 silently otherwise):
