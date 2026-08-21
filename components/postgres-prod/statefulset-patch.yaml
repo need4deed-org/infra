@@ -5,6 +5,11 @@ metadata:
 spec:
   template:
     spec:
+      # components/postgres has no imagePullSecrets: its image is the public
+      # postgres:17. This component swaps that for the private
+      # ghcr.io/need4deed-org/postgres build, which needs credentials to pull.
+      imagePullSecrets:
+        - name: ghcr-secret
       containers:
         - name: postgres
           # Stated in full because a strategic merge replaces this list rather
