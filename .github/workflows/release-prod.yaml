@@ -10,9 +10,19 @@ on:
 
 jobs:
   build-fe:
+    # A called reusable workflow's effective token permissions are capped by
+    # whatever the calling job declares - without this, fe's own
+    # `permissions: packages: write` gets capped down to read-only and the
+    # push fails with "denied: permission_denied: write_package".
+    permissions:
+      contents: read
+      packages: write
     uses: need4deed-org/fe/.github/workflows/build-fe.yaml@develop
 
   build-bootstrap:
+    permissions:
+      contents: read
+      packages: write
     uses: need4deed-org/be/.github/workflows/build-bootstrap.yaml@develop
 
   update-manifests:
