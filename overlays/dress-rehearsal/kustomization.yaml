@@ -16,10 +16,14 @@ resources:
   - ../../base/be
   - allow-be-to-postgres.yaml
 images:
-  # Same pins as overlays/prod; keep in step with it.
+  # Same pins as overlays/prod; keep in step with it. The rehearsal
+  # validates exactly what prod runs against restored data; to rehearse a
+  # candidate build instead, bump these pins the same way as a prod deploy.
+  - name: ghcr.io/need4deed-org/be
+    digest: sha256:ae044f92750c65cd0553bdf885b2ec31bc684c6aa2fd030dd463f5b933bf2e48
   - name: ghcr.io/need4deed-org/bootstrap
     newName: ghcr.io/theodore-evans/bootstrap
-    digest: sha256:14104e950fa15436355f2723f25b59df3d33fba0ad73b2d1202c8a50fab1426e
+    digest: sha256:b8e483df55d33ae327543bf633a95378a4bc5a0e7bf185d825834001effa8f3f
   - name: ghcr.io/need4deed-org/postgres
     newName: ghcr.io/theodore-evans/postgres
     digest: sha256:daf9e5521951cdd85d63e86068fd475fe28ccc827565f29d712359768f555a0e

@@ -119,7 +119,11 @@ The safe default. It leaves production running while you check the data.
    it pushes that timeline into the same repository and mixes two histories in
    one stanza.
 2. Copy `postgres-secret`, `pgbackrest-secret`, `postgres-tls` and `postgres-ca`
-   into the namespace. The ConfigMaps come from the overlay.
+   into the namespace. The ConfigMaps come from the overlay. For the dress
+   rehearsal (`overlays/dress-rehearsal`, applied on top of this one to run
+   the be against the restored data) also copy `be-secret`,
+   `bootstrap-secret` and `ghcr-secret`; without them the be pod stays in
+   `CreateContainerConfigError` / `ImagePullBackOff`.
 3. The new volume comes up as an empty cluster from `initdb`. Stop postgres as
    above and restore over it:
 
