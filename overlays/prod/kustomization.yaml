@@ -23,19 +23,21 @@ images:
   # bootstrap image (build-bootstrap workflow in the be repo) and bump
   # both digests together.
   - name: ghcr.io/need4deed-org/be
-    digest: sha256:17fc23897765181653f17e2391d1a0cdb3be0c6997ef1d72cec756408e2e6db5
+    digest: sha256:8945d0de04dd8717053ad77bb9ee3530d5664014d7c4ba149d2c9e8980358026
   # bootstrap, fe and postgres currently point at theodore-evans/* builds:
   # the org has no usable image (bootstrap's org build predates fixes the
   # be depends on; fe and postgres have no org workflow runs yet). Once the
   # org repos run the workflows, drop each newName and take the org digest.
   - name: ghcr.io/need4deed-org/bootstrap
     #newName: ghcr.io/theodore-evans/bootstrap
-    digest: sha256:32f72ad53b59f99a620567f53f91bdfa33392116784f1d47b838e2406b42ecac
+    digest: sha256:6e06acb42c744e64767e6132e9eed819c2f9f3f0b49483046365081f10ce00f2
+    
   - name: ghcr.io/need4deed-org/fe
     #newName: ghcr.io/theodore-evans/fe
     digest: sha256:e510c3f1e34eaf958f3f2557d430ce697a15ffd24df27aa8d7da45a16d104cc6
+    
   - name: ghcr.io/need4deed-org/postgres
-    newName: ghcr.io/theodore-evans/postgres
+    #newName: ghcr.io/theodore-evans/postgres
     digest: sha256:daf9e5521951cdd85d63e86068fd475fe28ccc827565f29d712359768f555a0e
 
 # On a fresh provision, keep be at 0 until real data is restored: with
