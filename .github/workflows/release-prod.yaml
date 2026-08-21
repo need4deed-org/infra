@@ -1,0 +1,95 @@
+name: release-prod
+
+# Deliberate, manual "cut a prod release" button. Builds fresh fe + bootstrap
+# images, resolves be's current :develop digest, and opens a PR bumping
+# overlays/prod/kustomization.yaml's three digest pins. Does NOT apply to
+# prod - merging this PR still requires the existing manual
+# `git pull && kubectl apply -k overlays/prod/` on the AITS prod box.
+on:
+  workflow_dispatch:
+
+jobs:
+  build-fe:
+    uses: need4deed-org/fe/.github/workflows/build-fe.yaml@develop
+
+  build-bootstrap:
+    uses: need4deed-org/be/.github/workflows/build-bootstrap.yaml@develop
+
+  update-manifests:
+    needs: [build-fe, build-bootstrap]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Update prod image digests
+        env:
+          BE_DIGEST: ${{ vars.BE_DEVELOP_DIGEST }}
+          FE_DIGEST: ${{ needs.build-fe.outputs.digest }}
+          BOOTSTRAP_DIGEST: ${{ needs.build-bootstrap.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+
+          path = pathlib.Path("overlays/prod/kustomization.yaml")
+          text = path.read_text()
+
+          digests = {
+              "ghcr.io/need4deed-org/be": os.environ["BE_DIGEST"],
+              "ghcr.io/need4deed-org/fe": os.environ["FE_DIGEST"],
+              "ghcr.io/need4deed-org/bootstrap": os.environ["BOOTSTRAP_DIGEST"],
+          }
+
+          for name, digest in digests.items():
+              if not digest or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+                  raise SystemExit(f"refusing to write a malformed digest for {name}: {digest!r}")
+              # Find "- name: <name>" then the next "digest: sha256:..." line,
+              # wherever it falls (a commented-out newName line may sit between).
+              pattern = re.compile(
+                  rf"(- name: {re.escape(name)}\n(?:.*\n)*?\s*digest: )sha256:[0-9a-f]{{64}}"
+              )
+              new_text, count = pattern.subn(rf"\g<1>{digest}", text, count=1)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one digest line for {name}, patched {count}")
+              text = new_text
+
+          path.write_text(text)
+          PY
+
+      - name: Verify prod overlay still renders
+        run: kubectl kustomize overlays/prod/ > /dev/null
+
+      - name: Open PR with the digest bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git diff --no-color overlays/prod/kustomization.yaml > /tmp/digest.diff
+
+          branch="release-prod-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add overlays/prod/kustomization.yaml
+          git commit -m "Update prod image digests (be/fe/bootstrap)"
+          git push -u origin "$branch"
+
+          {
+            echo "Automated by \`release-prod.yaml\` (run ${{ github.run_id }})."
+            echo
+            echo '```diff'
+            cat /tmp/digest.diff
+            echo '```'
+            echo
+            echo "Merging this does **not** apply it to prod. Still requires:"
+            echo '```bash'
+            echo "git -C /opt/infra pull"
+            echo "kubectl apply -k /opt/infra/overlays/prod"
+            echo '```'
+          } > /tmp/pr-body.md
+
+          gh pr create --title "Update prod image digests" --body-file /tmp/pr-body.md
