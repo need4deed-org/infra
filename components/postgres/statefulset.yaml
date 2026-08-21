@@ -94,19 +94,27 @@ spec:
               cpu: 500m
               memory: 1Gi
           # Five minutes of crash recovery must not become a kill loop.
+          # timeoutSeconds: 1 (the exec-probe default) is too tight on this
+          # node — pg_isready has to fork inside the container, and brief
+          # scheduling/CPU pressure (e.g. a sibling deploy pulling images)
+          # makes that time out even though postgres is fine, flapping
+          # readiness and eventually restarting the container.
           startupProbe:
             exec:
               command: [pg_isready, -U, postgres]
+            timeoutSeconds: 3
             periodSeconds: 10
             failureThreshold: 30
           readinessProbe:
             exec:
               command: [pg_isready, -U, postgres]
+            timeoutSeconds: 3
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             exec:
               command: [pg_isready, -U, postgres]
+            timeoutSeconds: 3
             periodSeconds: 10
             failureThreshold: 6
       volumes:
