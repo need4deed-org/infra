@@ -7,6 +7,8 @@ resources:
   - ingress.yaml
 components:
   - ../../components/postgres
+patches:
+  - path: delete-fe.yaml
 # Bump after a bootstrap rebuild:
 #   docker buildx imagetools inspect ghcr.io/need4deed-org/bootstrap:latest
 images:
