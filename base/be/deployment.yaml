@@ -82,9 +82,21 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 5
             failureThreshold: 6
+          # Cold start (TypeORM entity/migration reflection + Fastify/AJV schema
+          # compilation) is CPU-bound and can run past a minute under this
+          # container's 500m cpu limit — observed ~85s on n4d-dev. Without this,
+          # livenessProbe's own tight window kills the container mid-boot before
+          # it ever gets a chance to answer /health-check, forcing a crash-restart
+          # loop on every slow deploy. startupProbe absorbs that variance; once it
+          # passes once, liveness/readiness take over as normal.
+          startupProbe:
+            httpGet:
+              path: /health-check
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 36
           livenessProbe:
             httpGet:
               path: /health-check
               port: 8000
-            initialDelaySeconds: 30
             periodSeconds: 10
