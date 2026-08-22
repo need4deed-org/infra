@@ -34,7 +34,11 @@ spec:
           # Digest, not a tag: this image runs next to database credentials and
           # is rebuilt from a non-prod branch. Overlays override via `images:`.
           image: ghcr.io/need4deed-org/bootstrap@sha256:94286299edbe6ba65be0a046c72cc4995b21e5cccd0b9c5548c5895077e9ec89
-          imagePullPolicy: Always
+          # A digest can never point to different content, so re-pulling it
+          # over the network on every deploy (Always) is pure waste — costly
+          # on a network/resource-constrained node. IfNotPresent reuses the
+          # cached layer once it's there.
+          imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
                 name: bootstrap-secret
