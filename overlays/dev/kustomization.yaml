@@ -9,6 +9,16 @@ components:
   - ../../components/postgres
 patches:
   - path: delete-fe.yaml
+# Tags every resource so the deploy workflow can `--prune -l` by it: plain
+# `kubectl apply` never deletes a resource just because it's gone from the
+# manifest (that's how the old fe Deployment/Service kept running for weeks
+# after "Remove fe from the dev overlay" merged). includeSelectors: false so
+# this never touches Deployment/Service selector fields (those are immutable
+# post-creation — adding a label there would break every existing rollout).
+labels:
+  - pairs:
+      infra.need4deed.org/overlay: dev
+    includeSelectors: false
 # Bump after a bootstrap rebuild:
 #   docker buildx imagetools inspect ghcr.io/need4deed-org/bootstrap:latest
 images:
