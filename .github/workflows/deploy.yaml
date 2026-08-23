@@ -105,7 +105,12 @@ jobs:
 
             cd /opt/infra
             git pull
-            kubectl apply -k overlays/dev/
+            # Plain apply never deletes a resource just because it's gone
+            # from the manifest — that's how the old fe Deployment/Service
+            # kept running for weeks after "Remove fe from the dev overlay"
+            # merged. --prune -l scopes deletion to only what this overlay's
+            # labels transformer tags (overlays/dev/kustomization.yaml).
+            kubectl apply -k overlays/dev/ --prune -l infra.need4deed.org/overlay=dev
             # A bad digest or missing secret otherwise fails invisibly: the
             # old ReplicaSet keeps serving and the workflow stays green.
             kubectl rollout status deployment/be -n n4d-dev --timeout=300s
