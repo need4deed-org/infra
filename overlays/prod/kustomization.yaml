@@ -27,7 +27,7 @@ images:
   # bootstrap image (build-bootstrap workflow in the be repo) and bump
   # both digests together.
   - name: ghcr.io/need4deed-org/be
-    digest: sha256:481c11b94a7e091da5c6423044bbbc8a718b5fecc51d6d34269df42bd8e07e92
+    digest: sha256:82598e4a3b0d5a06b188336d8839be786a9515f16391e5f3f6b344e4a7ef7b9c
   # bootstrap and fe currently point at theodore-evans/* builds: the org has
   # no usable image (bootstrap's org build predates fixes the be depends on;
   # fe has no org workflow run yet). Once the org repos run the workflows,
@@ -40,11 +40,11 @@ images:
   # had an image at that digest, which is what took prod's postgres down.
   - name: ghcr.io/need4deed-org/bootstrap
     #newName: ghcr.io/theodore-evans/bootstrap
-    digest: sha256:8140f049f4e5a73ea608e0273a1c9d865c7a79747fdf738e5c4fb16dad8dcff2
+    digest: sha256:14899b5625cea0cb1facdcefec014b9c77e1690aa21ac12c2c16b62781d68aca
 
   - name: ghcr.io/need4deed-org/fe
     #newName: ghcr.io/theodore-evans/fe
-    digest: sha256:c0eab40d95ffb32c225b8edcc327cac200f2497bcd72393a69406c182528534b
+    digest: sha256:790c3c3f4d104a01792bdf9f6526e665ac7769b57d0ea0701b96152a436b3099
 
   - name: ghcr.io/need4deed-org/postgres
     digest: sha256:a2e106c14ab33b640c7a83993c193538b79bf05f37c82bbddfc58d9563cc448a
