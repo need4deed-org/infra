@@ -67,11 +67,8 @@ spec:
           env:
             - name: DB_SSL_CA_PATH
               value: /app/certificates/postgres-ca.crt
-            # Unset (be-secret carries it empty; env beats envFrom), the be
-            # falls back to its hardcoded CloudFront URL and fetches email
-            # templates from the old AWS bucket — an origin that dies with
-            # the AWS teardown. No trailing slash: the be appends /emails/….
             - name: CDN_BASE_URL
+              # No trailing slash: the be appends /emails/….
               value: https://cdn.need4deed.org
           volumeMounts:
             - name: postgres-ca
