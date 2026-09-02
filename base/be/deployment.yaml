@@ -67,6 +67,9 @@ spec:
           env:
             - name: DB_SSL_CA_PATH
               value: /app/certificates/postgres-ca.crt
+            - name: CDN_BASE_URL
+              # No trailing slash: the be appends /emails/….
+              value: https://cdn.need4deed.org
           volumeMounts:
             - name: postgres-ca
               mountPath: /app/certificates/postgres-ca.crt
