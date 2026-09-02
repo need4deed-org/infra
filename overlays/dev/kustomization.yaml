@@ -9,12 +9,27 @@ components:
   - ../../components/postgres
 patches:
   - path: delete-fe.yaml
-# Tags every resource so the deploy workflow can `--prune -l` by it: plain
-# `kubectl apply` never deletes a resource just because it's gone from the
-# manifest (that's how the old fe Deployment/Service kept running for weeks
-# after "Remove fe from the dev overlay" merged). includeSelectors: false so
-# this never touches Deployment/Service selector fields (those are immutable
-# post-creation — adding a label there would break every existing rollout).
+  # Tags every resource so the deploy workflow can `--prune -l` by it: plain
+  # `kubectl apply` never deletes a resource just because it's gone from the
+  # manifest (that's how the old fe Deployment/Service kept running for weeks
+  # after "Remove fe from the dev overlay" merged). includeSelectors: false so
+  # this never touches Deployment/Service selector fields (those are immutable
+  # post-creation — adding a label there would break every existing rollout).
+  - target:
+      kind: Deployment
+      name: be
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: be
+      spec:
+        template:
+          spec:
+            containers:
+              - name: be
+                livenessProbe:
+                  periodSeconds: 300
 labels:
   - pairs:
       infra.need4deed.org/overlay: dev
