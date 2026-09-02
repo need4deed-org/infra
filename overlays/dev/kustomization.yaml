@@ -23,4 +23,4 @@ labels:
 #   docker buildx imagetools inspect ghcr.io/need4deed-org/bootstrap:latest
 images:
   - name: ghcr.io/need4deed-org/bootstrap
-    digest: sha256:94286299edbe6ba65be0a046c72cc4995b21e5cccd0b9c5548c5895077e9ec89
+    digest: sha256:3f185489777d7d7456550e9a7275349b252dd068d9d2632d6b910eef2a7a54f8
